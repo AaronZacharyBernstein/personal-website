@@ -9,13 +9,48 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as IndexRouteImport } from './routes/index'
+import { Route as SceneRouteImport } from './routes/_scene'
+import { Route as SceneIndexRouteImport } from './routes/_scene.index'
+import { Route as SceneGithubRouteImport } from './routes/_scene.github'
+import { Route as SceneLinksRouteImport } from './routes/_scene.links'
+import { Route as SceneProjectsRouteImport } from './routes/_scene.projects'
+import { Route as SceneResumeRouteImport } from './routes/_scene.resume'
+import { Route as SceneTimelineRouteImport } from './routes/_scene.timeline'
 import { Route as ApiTrpcSplatRouteImport } from './routes/api.trpc.$'
 
-const IndexRoute = IndexRouteImport.update({
+const SceneRoute = SceneRouteImport.update({
+  id: '/_scene',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SceneIndexRoute = SceneIndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => SceneRoute,
+} as any)
+const SceneGithubRoute = SceneGithubRouteImport.update({
+  id: '/github',
+  path: '/github',
+  getParentRoute: () => SceneRoute,
+} as any)
+const SceneLinksRoute = SceneLinksRouteImport.update({
+  id: '/links',
+  path: '/links',
+  getParentRoute: () => SceneRoute,
+} as any)
+const SceneProjectsRoute = SceneProjectsRouteImport.update({
+  id: '/projects',
+  path: '/projects',
+  getParentRoute: () => SceneRoute,
+} as any)
+const SceneResumeRoute = SceneResumeRouteImport.update({
+  id: '/resume',
+  path: '/resume',
+  getParentRoute: () => SceneRoute,
+} as any)
+const SceneTimelineRoute = SceneTimelineRouteImport.update({
+  id: '/timeline',
+  path: '/timeline',
+  getParentRoute: () => SceneRoute,
 } as any)
 const ApiTrpcSplatRoute = ApiTrpcSplatRouteImport.update({
   id: '/api/trpc/$',
@@ -24,39 +59,120 @@ const ApiTrpcSplatRoute = ApiTrpcSplatRouteImport.update({
 } as any)
 
 export interface FileRoutesByFullPath {
-  '/': typeof IndexRoute
+  '/': typeof SceneIndexRoute
+  '/github': typeof SceneGithubRoute
+  '/links': typeof SceneLinksRoute
+  '/projects': typeof SceneProjectsRoute
+  '/resume': typeof SceneResumeRoute
+  '/timeline': typeof SceneTimelineRoute
   '/api/trpc/$': typeof ApiTrpcSplatRoute
 }
 export interface FileRoutesByTo {
-  '/': typeof IndexRoute
+  '/github': typeof SceneGithubRoute
+  '/links': typeof SceneLinksRoute
+  '/projects': typeof SceneProjectsRoute
+  '/resume': typeof SceneResumeRoute
+  '/timeline': typeof SceneTimelineRoute
+  '/': typeof SceneIndexRoute
   '/api/trpc/$': typeof ApiTrpcSplatRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
-  '/': typeof IndexRoute
+  '/_scene': typeof SceneRouteWithChildren
+  '/_scene/github': typeof SceneGithubRoute
+  '/_scene/links': typeof SceneLinksRoute
+  '/_scene/projects': typeof SceneProjectsRoute
+  '/_scene/resume': typeof SceneResumeRoute
+  '/_scene/timeline': typeof SceneTimelineRoute
+  '/_scene/': typeof SceneIndexRoute
   '/api/trpc/$': typeof ApiTrpcSplatRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/api/trpc/$'
+  fullPaths:
+    | '/'
+    | '/github'
+    | '/links'
+    | '/projects'
+    | '/resume'
+    | '/timeline'
+    | '/api/trpc/$'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/api/trpc/$'
-  id: '__root__' | '/' | '/api/trpc/$'
+  to:
+    | '/github'
+    | '/links'
+    | '/projects'
+    | '/resume'
+    | '/timeline'
+    | '/'
+    | '/api/trpc/$'
+  id:
+    | '__root__'
+    | '/_scene'
+    | '/_scene/github'
+    | '/_scene/links'
+    | '/_scene/projects'
+    | '/_scene/resume'
+    | '/_scene/timeline'
+    | '/_scene/'
+    | '/api/trpc/$'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
-  IndexRoute: typeof IndexRoute
+  SceneRoute: typeof SceneRouteWithChildren
   ApiTrpcSplatRoute: typeof ApiTrpcSplatRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/': {
-      id: '/'
+    '/_scene': {
+      id: '/_scene'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof SceneRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_scene/': {
+      id: '/_scene/'
       path: '/'
       fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof SceneIndexRouteImport
+      parentRoute: typeof SceneRoute
+    }
+    '/_scene/github': {
+      id: '/_scene/github'
+      path: '/github'
+      fullPath: '/github'
+      preLoaderRoute: typeof SceneGithubRouteImport
+      parentRoute: typeof SceneRoute
+    }
+    '/_scene/links': {
+      id: '/_scene/links'
+      path: '/links'
+      fullPath: '/links'
+      preLoaderRoute: typeof SceneLinksRouteImport
+      parentRoute: typeof SceneRoute
+    }
+    '/_scene/projects': {
+      id: '/_scene/projects'
+      path: '/projects'
+      fullPath: '/projects'
+      preLoaderRoute: typeof SceneProjectsRouteImport
+      parentRoute: typeof SceneRoute
+    }
+    '/_scene/resume': {
+      id: '/_scene/resume'
+      path: '/resume'
+      fullPath: '/resume'
+      preLoaderRoute: typeof SceneResumeRouteImport
+      parentRoute: typeof SceneRoute
+    }
+    '/_scene/timeline': {
+      id: '/_scene/timeline'
+      path: '/timeline'
+      fullPath: '/timeline'
+      preLoaderRoute: typeof SceneTimelineRouteImport
+      parentRoute: typeof SceneRoute
     }
     '/api/trpc/$': {
       id: '/api/trpc/$'
@@ -68,8 +184,28 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface SceneRouteChildren {
+  SceneGithubRoute: typeof SceneGithubRoute
+  SceneLinksRoute: typeof SceneLinksRoute
+  SceneProjectsRoute: typeof SceneProjectsRoute
+  SceneResumeRoute: typeof SceneResumeRoute
+  SceneTimelineRoute: typeof SceneTimelineRoute
+  SceneIndexRoute: typeof SceneIndexRoute
+}
+
+const SceneRouteChildren: SceneRouteChildren = {
+  SceneGithubRoute: SceneGithubRoute,
+  SceneLinksRoute: SceneLinksRoute,
+  SceneProjectsRoute: SceneProjectsRoute,
+  SceneResumeRoute: SceneResumeRoute,
+  SceneTimelineRoute: SceneTimelineRoute,
+  SceneIndexRoute: SceneIndexRoute,
+}
+
+const SceneRouteWithChildren = SceneRoute._addFileChildren(SceneRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
-  IndexRoute: IndexRoute,
+  SceneRoute: SceneRouteWithChildren,
   ApiTrpcSplatRoute: ApiTrpcSplatRoute,
 }
 export const routeTree = rootRouteImport
