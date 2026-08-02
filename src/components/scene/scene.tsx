@@ -1,6 +1,10 @@
 import { useNavigate } from "@tanstack/react-router";
 import type { HotspotId, SceneLayer } from "#/config/scene";
-import { SCENE_HOTSPOTS, SCENE_LAYERS } from "#/config/scene";
+import {
+	SCENE_CANVAS_COLOR,
+	SCENE_HOTSPOTS,
+	SCENE_LAYERS,
+} from "#/config/scene";
 import { cn } from "#/lib/utils.ts";
 import { DebugOverlay } from "./debug-overlay";
 import {
@@ -26,7 +30,11 @@ export function Scene({ hoveredId, onHoverChange, debug }: SceneProps) {
 	const navigate = useNavigate();
 
 	return (
-		<div aria-hidden="true" className="relative h-full w-full bg-neutral-200">
+		<div
+			aria-hidden="true"
+			className="relative h-full w-full"
+			style={{ backgroundColor: SCENE_CANVAS_COLOR }}
+		>
 			{/* Paint order comes from each layer's zIndex, not array order. */}
 			{SCENE_LAYERS.map((layer) => (
 				<ArtLayer

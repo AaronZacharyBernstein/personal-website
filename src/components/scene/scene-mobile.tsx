@@ -1,4 +1,4 @@
-import { SCENE_MOBILE_IMAGE } from "#/config/scene";
+import { SCENE_CANVAS_COLOR, SCENE_MOBILE_IMAGE } from "#/config/scene";
 import { cn } from "#/lib/utils.ts";
 import { useImageLoad } from "./use-image-load";
 
@@ -13,7 +13,8 @@ export function SceneMobile() {
 	return (
 		<div
 			aria-hidden="true"
-			className="pointer-events-none h-full w-full bg-neutral-200"
+			className="pointer-events-none h-full w-full"
+			style={{ backgroundColor: SCENE_CANVAS_COLOR }}
 		>
 			<img
 				ref={image.ref}
