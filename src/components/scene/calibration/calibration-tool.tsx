@@ -416,7 +416,7 @@ export default function CalibrationTool({ debug }: { debug: boolean }) {
 			<div
 				ref={canvasRef}
 				aria-hidden="true"
-				className="relative w-full touch-none select-none rounded-lg border border-neutral-400 bg-neutral-200"
+				className="relative isolate w-full touch-none select-none rounded-lg border border-neutral-400 bg-neutral-200"
 				style={{
 					maxWidth: SCENE_MAX_WIDTH,
 					aspectRatio: `${SCENE_ASPECT_RATIO} / 1`,

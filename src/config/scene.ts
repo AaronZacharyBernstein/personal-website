@@ -3,9 +3,6 @@ export const SCENE_ASPECT_RATIO = 2; // width / height
 /** Max rendered width of the scene box. Tune here, nowhere else. */
 export const SCENE_MAX_WIDTH = "72rem";
 
-/** Flat field behind the scene; scene data, not theme. */
-export const SCENE_CANVAS_COLOR = "#F7F1E8";
-
 export type HotspotId = "resume" | "links" | "github" | "projects" | "timeline";
 
 export type SectionRoute =

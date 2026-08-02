@@ -1,10 +1,6 @@
 import { useNavigate } from "@tanstack/react-router";
 import type { HotspotId, SceneLayer } from "#/config/scene";
-import {
-	SCENE_CANVAS_COLOR,
-	SCENE_HOTSPOTS,
-	SCENE_LAYERS,
-} from "#/config/scene";
+import { SCENE_HOTSPOTS, SCENE_LAYERS } from "#/config/scene";
 import { cn } from "#/lib/utils.ts";
 import { DebugOverlay } from "./debug-overlay";
 import {
@@ -25,16 +21,13 @@ export interface SceneProps {
  * The desktop scene. Purely visual: keyboard and assistive-technology
  * access to the sections is provided exclusively by SectionNav, so the
  * whole canvas is aria-hidden and the hit polygons are pointer-only.
+ * No background of its own: the scene sits directly on the page field.
  */
 export function Scene({ hoveredId, onHoverChange, debug }: SceneProps) {
 	const navigate = useNavigate();
 
 	return (
-		<div
-			aria-hidden="true"
-			className="relative h-full w-full"
-			style={{ backgroundColor: SCENE_CANVAS_COLOR }}
-		>
+		<div aria-hidden="true" className="relative h-full w-full">
 			{/* Paint order comes from each layer's zIndex, not array order. */}
 			{SCENE_LAYERS.map((layer) => (
 				<ArtLayer
@@ -91,7 +84,7 @@ function ArtLayer({ layer, lifted }: { layer: SceneLayer; lifted: boolean }) {
 		>
 			{image.status !== "loaded" ? (
 				<div
-					className="absolute inset-0 flex items-center justify-center text-xs text-neutral-700"
+					className="absolute inset-0 flex items-center justify-center text-xs text-foreground"
 					style={{
 						border: `1px solid ${layer.placeholderColor}`,
 						backgroundColor: `${layer.placeholderColor}22`,
@@ -113,7 +106,7 @@ function ArtLayer({ layer, lifted }: { layer: SceneLayer; lifted: boolean }) {
 				)}
 			/>
 			{layer.kind === "hotspot" && lifted ? (
-				<span className="pointer-events-none absolute -top-6 left-1/2 -translate-x-1/2 rounded bg-neutral-800 px-2 py-0.5 text-xs whitespace-nowrap text-white">
+				<span className="pointer-events-none absolute -top-6 left-1/2 -translate-x-1/2 rounded bg-foreground px-2 py-0.5 text-xs whitespace-nowrap text-background">
 					{layer.label}
 				</span>
 			) : null}

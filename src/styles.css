@@ -4,75 +4,82 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/*
+ * Warm neutral ramp, hue 83.06 = the hue of the #F5EEE1 site background.
+ * Light-mode surface tokens are the zinc baseline shifted down by the same
+ * 0.049 L the background moved from white, so every surface keeps its
+ * contrast step against the page. muted-foreground is darkened past the
+ * plain hue shift (0.552 -> 0.532) to hold WCAG AA (4.56:1) on the tan.
+ */
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.141 0.005 285.823);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.141 0.005 285.823);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.141 0.005 285.823);
-  --primary: oklch(0.21 0.006 285.885);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.967 0.001 286.375);
-  --secondary-foreground: oklch(0.21 0.006 285.885);
-  --muted: oklch(0.967 0.001 286.375);
-  --muted-foreground: oklch(0.552 0.016 285.938);
-  --accent: oklch(0.967 0.001 286.375);
-  --accent-foreground: oklch(0.21 0.006 285.885);
+  --background: oklch(0.951 0.019 83.06);
+  --foreground: oklch(0.141 0.01 83.06);
+  --card: oklch(0.951 0.019 83.06);
+  --card-foreground: oklch(0.141 0.01 83.06);
+  --popover: oklch(0.951 0.019 83.06);
+  --popover-foreground: oklch(0.141 0.01 83.06);
+  --primary: oklch(0.21 0.012 83.06);
+  --primary-foreground: oklch(0.985 0.008 83.06);
+  --secondary: oklch(0.918 0.019 83.06);
+  --secondary-foreground: oklch(0.21 0.012 83.06);
+  --muted: oklch(0.918 0.019 83.06);
+  --muted-foreground: oklch(0.532 0.022 83.06);
+  --accent: oklch(0.918 0.019 83.06);
+  --accent-foreground: oklch(0.21 0.012 83.06);
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(0.577 0.245 27.325);
-  --border: oklch(0.92 0.004 286.32);
-  --input: oklch(0.92 0.004 286.32);
-  --ring: oklch(0.871 0.006 286.286);
+  --border: oklch(0.871 0.019 83.06);
+  --input: oklch(0.871 0.019 83.06);
+  --ring: oklch(0.822 0.019 83.06);
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
   --chart-4: oklch(0.828 0.189 84.429);
   --chart-5: oklch(0.769 0.188 70.08);
   --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.141 0.005 285.823);
-  --sidebar-primary: oklch(0.21 0.006 285.885);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.967 0.001 286.375);
-  --sidebar-accent-foreground: oklch(0.21 0.006 285.885);
-  --sidebar-border: oklch(0.92 0.004 286.32);
-  --sidebar-ring: oklch(0.871 0.006 286.286);
+  --sidebar: oklch(0.936 0.019 83.06);
+  --sidebar-foreground: oklch(0.141 0.01 83.06);
+  --sidebar-primary: oklch(0.21 0.012 83.06);
+  --sidebar-primary-foreground: oklch(0.985 0.008 83.06);
+  --sidebar-accent: oklch(0.918 0.019 83.06);
+  --sidebar-accent-foreground: oklch(0.21 0.012 83.06);
+  --sidebar-border: oklch(0.871 0.019 83.06);
+  --sidebar-ring: oklch(0.822 0.019 83.06);
 }
 
 .dark {
-  --background: oklch(0.141 0.005 285.823);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.141 0.005 285.823);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.141 0.005 285.823);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.985 0 0);
-  --primary-foreground: oklch(0.21 0.006 285.885);
-  --secondary: oklch(0.274 0.006 286.033);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.274 0.006 286.033);
-  --muted-foreground: oklch(0.705 0.015 286.067);
-  --accent: oklch(0.274 0.006 286.033);
-  --accent-foreground: oklch(0.985 0 0);
+  --background: oklch(0.141 0.008 83.06);
+  --foreground: oklch(0.985 0.008 83.06);
+  --card: oklch(0.141 0.008 83.06);
+  --card-foreground: oklch(0.985 0.008 83.06);
+  --popover: oklch(0.141 0.008 83.06);
+  --popover-foreground: oklch(0.985 0.008 83.06);
+  --primary: oklch(0.985 0.008 83.06);
+  --primary-foreground: oklch(0.21 0.012 83.06);
+  --secondary: oklch(0.274 0.012 83.06);
+  --secondary-foreground: oklch(0.985 0.008 83.06);
+  --muted: oklch(0.274 0.012 83.06);
+  --muted-foreground: oklch(0.705 0.022 83.06);
+  --accent: oklch(0.274 0.012 83.06);
+  --accent-foreground: oklch(0.985 0.008 83.06);
   --destructive: oklch(0.396 0.141 25.723);
   --destructive-foreground: oklch(0.637 0.237 25.331);
-  --border: oklch(0.274 0.006 286.033);
-  --input: oklch(0.274 0.006 286.033);
-  --ring: oklch(0.442 0.017 285.786);
+  --border: oklch(0.274 0.012 83.06);
+  --input: oklch(0.274 0.012 83.06);
+  --ring: oklch(0.442 0.018 83.06);
   --chart-1: oklch(0.488 0.243 264.376);
   --chart-2: oklch(0.696 0.17 162.48);
   --chart-3: oklch(0.769 0.188 70.08);
   --chart-4: oklch(0.627 0.265 303.9);
   --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.21 0.006 285.885);
-  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar: oklch(0.21 0.012 83.06);
+  --sidebar-foreground: oklch(0.985 0.008 83.06);
   --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.274 0.006 286.033);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(0.274 0.006 286.033);
-  --sidebar-ring: oklch(0.442 0.017 285.786);
+  --sidebar-primary-foreground: oklch(0.985 0.008 83.06);
+  --sidebar-accent: oklch(0.274 0.012 83.06);
+  --sidebar-accent-foreground: oklch(0.985 0.008 83.06);
+  --sidebar-border: oklch(0.274 0.012 83.06);
+  --sidebar-ring: oklch(0.442 0.018 83.06);
 }
 
 @theme inline {
@@ -114,10 +121,13 @@
   --color-sidebar-ring: var(--sidebar-ring);
 }
 
+/* The warm field is the page: paint it on every root so it covers the
+   viewport and overscroll, not just the content box. */
 html,
 body,
 #app {
   min-height: 100%;
+  background-color: var(--background);
 }
 
 @layer base {
@@ -125,7 +135,6 @@ body,
     @apply border-border outline-ring/50;
   }
   body {
-    background-color: var(--background);
     color: var(--foreground);
   }
 }
