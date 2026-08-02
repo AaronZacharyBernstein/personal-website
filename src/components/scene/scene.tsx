@@ -1,37 +1,15 @@
 import { useNavigate } from "@tanstack/react-router";
-import type { Hotspot, HotspotId } from "#/config/scene";
-import {
-	SCENE_ASPECT_RATIO,
-	SCENE_BACKGROUND_IMAGE,
-	SCENE_HOTSPOTS,
-} from "#/config/scene";
+import type { HotspotId, SceneLayer } from "#/config/scene";
+import { SCENE_HOTSPOTS, SCENE_LAYERS } from "#/config/scene";
 import { cn } from "#/lib/utils.ts";
+import { DebugOverlay } from "./debug-overlay";
+import {
+	HIT_OVERLAY_Z,
+	toViewBoxPoints,
+	VIEWBOX_HEIGHT,
+	VIEWBOX_WIDTH,
+} from "./geometry";
 import { useImageLoad } from "./use-image-load";
-
-const VIEWBOX_WIDTH = 1000;
-const VIEWBOX_HEIGHT = VIEWBOX_WIDTH / SCENE_ASPECT_RATIO;
-
-/** Overlays must sit above every art layer, whatever the config says. */
-const HIT_OVERLAY_Z =
-	Math.max(...SCENE_HOTSPOTS.map((hotspot) => hotspot.zIndex)) + 10;
-const DEBUG_OVERLAY_Z = HIT_OVERLAY_Z + 10;
-
-function toViewBoxPoints(polygon: Hotspot["polygon"]): string {
-	return polygon
-		.map(([x, y]) => `${x * VIEWBOX_WIDTH},${y * VIEWBOX_HEIGHT}`)
-		.join(" ");
-}
-
-/** Vertex average; good enough for the small convex hotspot polygons. */
-function polygonCentroid(polygon: Hotspot["polygon"]): [number, number] {
-	let sumX = 0;
-	let sumY = 0;
-	for (const [x, y] of polygon) {
-		sumX += x;
-		sumY += y;
-	}
-	return [sumX / polygon.length, sumY / polygon.length];
-}
 
 export interface SceneProps {
 	hoveredId: HotspotId | null;
@@ -48,13 +26,13 @@ export function Scene({ hoveredId, onHoverChange, debug }: SceneProps) {
 	const navigate = useNavigate();
 
 	return (
-		<div aria-hidden="true" className="relative h-full w-full">
-			<BackgroundPlate />
-			{SCENE_HOTSPOTS.map((hotspot) => (
-				<SceneLayer
-					key={hotspot.id}
-					hotspot={hotspot}
-					lifted={hoveredId === hotspot.id}
+		<div aria-hidden="true" className="relative h-full w-full bg-neutral-200">
+			{/* Paint order comes from each layer's zIndex, not array order. */}
+			{SCENE_LAYERS.map((layer) => (
+				<ArtLayer
+					key={layer.id}
+					layer={layer}
+					lifted={layer.kind === "hotspot" && hoveredId === layer.id}
 				/>
 			))}
 			<svg
@@ -85,35 +63,9 @@ export function Scene({ hoveredId, onHoverChange, debug }: SceneProps) {
 	);
 }
 
-function BackgroundPlate() {
+function ArtLayer({ layer, lifted }: { layer: SceneLayer; lifted: boolean }) {
 	const image = useImageLoad();
-
-	return (
-		<div className="absolute inset-0 bg-neutral-200">
-			<img
-				ref={image.ref}
-				src={SCENE_BACKGROUND_IMAGE}
-				alt=""
-				draggable={false}
-				onLoad={image.onLoad}
-				onError={image.onError}
-				className={cn(
-					"h-full w-full object-cover",
-					image.status !== "loaded" && "opacity-0",
-				)}
-			/>
-		</div>
-	);
-}
-
-function SceneLayer({
-	hotspot,
-	lifted,
-}: {
-	hotspot: Hotspot;
-	lifted: boolean;
-}) {
-	const image = useImageLoad();
+	const label = layer.kind === "hotspot" ? layer.label : layer.id;
 
 	return (
 		<div
@@ -122,27 +74,27 @@ function SceneLayer({
 				lifted && "drop-shadow-md motion-safe:-translate-y-1.5",
 			)}
 			style={{
-				left: `${hotspot.layer.x * 100}%`,
-				top: `${hotspot.layer.y * 100}%`,
-				width: `${hotspot.layer.width * 100}%`,
-				height: `${hotspot.layer.height * 100}%`,
-				zIndex: hotspot.zIndex,
+				left: `${layer.box.x * 100}%`,
+				top: `${layer.box.y * 100}%`,
+				width: `${layer.box.width * 100}%`,
+				height: `${layer.box.height * 100}%`,
+				zIndex: layer.zIndex,
 			}}
 		>
 			{image.status !== "loaded" ? (
 				<div
 					className="absolute inset-0 flex items-center justify-center text-xs text-neutral-700"
 					style={{
-						border: `1px solid ${hotspot.placeholderColor}`,
-						backgroundColor: `${hotspot.placeholderColor}22`,
+						border: `1px solid ${layer.placeholderColor}`,
+						backgroundColor: `${layer.placeholderColor}22`,
 					}}
 				>
-					{hotspot.label}
+					{label}
 				</div>
 			) : null}
 			<img
 				ref={image.ref}
-				src={hotspot.image}
+				src={layer.image}
 				alt=""
 				draggable={false}
 				onLoad={image.onLoad}
@@ -152,58 +104,11 @@ function SceneLayer({
 					image.status !== "loaded" && "opacity-0",
 				)}
 			/>
-			{lifted ? (
+			{layer.kind === "hotspot" && lifted ? (
 				<span className="pointer-events-none absolute -top-6 left-1/2 -translate-x-1/2 rounded bg-neutral-800 px-2 py-0.5 text-xs whitespace-nowrap text-white">
-					{hotspot.label}
+					{layer.label}
 				</span>
 			) : null}
 		</div>
-	);
-}
-
-/**
- * Development tool for nudging polygon coordinates until they match the
- * drawn shapes. Mounted only when the debug search param is on, so it has
- * zero effect on the normal render path.
- */
-function DebugOverlay({ hoveredId }: { hoveredId: HotspotId | null }) {
-	return (
-		<svg
-			viewBox={`0 0 ${VIEWBOX_WIDTH} ${VIEWBOX_HEIGHT}`}
-			preserveAspectRatio="none"
-			aria-hidden="true"
-			className="pointer-events-none absolute inset-0 h-full w-full"
-			style={{ zIndex: DEBUG_OVERLAY_Z }}
-		>
-			{SCENE_HOTSPOTS.map((hotspot) => {
-				const [centroidX, centroidY] = polygonCentroid(hotspot.polygon);
-				return (
-					<g key={hotspot.id}>
-						<polygon
-							points={toViewBoxPoints(hotspot.polygon)}
-							fill={hotspot.placeholderColor}
-							fillOpacity={0.12}
-							stroke={hotspot.placeholderColor}
-							strokeWidth={2}
-							strokeOpacity={hoveredId === hotspot.id ? 1 : 0.5}
-						/>
-						{/* Undistorted only because the viewBox matches the 2:1
-						    container; preserveAspectRatio="none" shears text if
-						    the aspect ratio ever changes. */}
-						<text
-							x={centroidX * VIEWBOX_WIDTH}
-							y={centroidY * VIEWBOX_HEIGHT}
-							textAnchor="middle"
-							dominantBaseline="middle"
-							fontSize={14}
-							fontFamily="monospace"
-							fill={hotspot.placeholderColor}
-						>
-							{hotspot.id}
-						</text>
-					</g>
-				);
-			})}
-		</svg>
 	);
 }
