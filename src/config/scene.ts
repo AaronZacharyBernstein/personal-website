@@ -85,10 +85,22 @@ export const SCENE_LAYERS: ReadonlyArray<SceneLayer> = [
 		placeholderColor: "#64748b",
 	},
 	{
+		/**
+		 * Aspect-locked to the 1023x1537 asset (2*width/height == 0.66558),
+		 * then pinned by three things: centered on 0.500, head top at 0.1366,
+		 * and — because the figure is cropped flat at the image's bottom edge
+		 * — a crop line at 0.6618 that clears the desk's back edge by 8.9 CSS
+		 * px at a 1440 viewport, measured at alpha 250 so the desk's own
+		 * anti-aliased top row is not counted as cover. Width comes from
+		 * preserving the previous asset's rendered body width (0.1817) across
+		 * the new art's 1.3% transparent side margin. Re-derive all four
+		 * numbers from the image if the art is replaced again; do not carry a
+		 * width/height pair over from a different asset.
+		 */
 		kind: "decorative",
 		id: "aaron",
 		image: "/images/aaron.webp",
-		box: { x: 0.4092, y: 0.1148, width: 0.1817, height: 0.5451 },
+		box: { x: 0.408, y: 0.1089, width: 0.184, height: 0.5529 },
 		zIndex: 5,
 		placeholderColor: "#ec4899",
 	},
