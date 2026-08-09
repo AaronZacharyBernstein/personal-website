@@ -35,6 +35,16 @@
 	},
 	"overrides": [
 		{
+			"includes": ["**/src/config/scene.ts"],
+			"linter": {
+				"rules": {
+					"suspicious": {
+						"noApproximativeNumericConstant": "off"
+					}
+				}
+			}
+		},
+		{
 			"includes": ["**/src/components/scene/calibration/**"],
 			"linter": {
 				"rules": {

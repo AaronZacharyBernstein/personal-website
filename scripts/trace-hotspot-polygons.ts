@@ -23,7 +23,12 @@ const ALPHA_THRESHOLD = 32;
 const MIN_VERTICES = 8;
 const MAX_VERTICES = 16;
 
-const imagesDir = fileURLToPath(new URL("../public/images/", import.meta.url));
+/**
+ * The full-resolution PNG sources, not the generated WebP the app loads:
+ * this decoder handles 8-bit non-interlaced RGBA only, and tracing the
+ * downscaled art would quantize every vertex to the smaller pixel grid.
+ */
+const imagesDir = fileURLToPath(new URL("../assets/images-src/", import.meta.url));
 
 interface DecodedAlpha {
 	width: number;
@@ -405,7 +410,10 @@ function alphaBoundingBox(mask: Uint8Array, width: number, height: number): Alph
 const analyze = process.argv.includes("--analyze");
 
 for (const layer of SCENE_LAYERS) {
-	const fileName = layer.image.split("/").pop() ?? "";
+	const fileName = (layer.image.split("/").pop() ?? "").replace(
+		/\.[^.]+$/,
+		".png",
+	);
 	let decoded: DecodedAlpha;
 	try {
 		decoded = decodePngAlpha(readFileSync(imagesDir + fileName));

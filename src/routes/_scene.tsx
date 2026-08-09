@@ -64,6 +64,11 @@ function SceneLayout() {
 	const [navOpen, setNavOpen] = useState(false);
 	const navButtonRef = useRef<HTMLButtonElement | null>(null);
 	const { debug, calibrate } = Route.useSearch();
+	// Client-only chrome only. The scene itself no longer consults this: its
+	// two variants both render on the server and hide themselves in CSS, so
+	// nothing about the art waits on hydration. What is left needs the real
+	// viewport — the calibration tool is a pointer-driven desktop editor, and
+	// `inert` is meaningless below md where the nav never collapses.
 	const isDesktop = useMediaQuery(DESKTOP_MEDIA_QUERY);
 
 	// Every close path must also clear the hover-sync state: a link hidden
@@ -155,17 +160,20 @@ function SceneLayout() {
 							aspectRatio: `${SCENE_ASPECT_RATIO} / 1`,
 						}}
 					>
-						{/* isDesktop is null on the server and during the first
-						    hydration render: neither variant mounts, but this box
-						    still reserves the scene's 2:1 space. */}
-						{isDesktop === true ? (
-							<Scene
-								hoveredId={hoveredId}
-								onHoverChange={setHoveredId}
-								debug={debug === true}
-							/>
-						) : null}
-						{isDesktop === false ? <SceneMobile /> : null}
+						{/* Both variants render on the server and stay mounted at
+						    every width; each hides itself with a CSS breakpoint,
+						    and the media-query-scoped background rules mean the
+						    hidden one never fetches its art. Nothing on this path
+						    reads the viewport, so server and client markup are
+						    identical and the art starts downloading straight off
+						    the SSR'd HTML instead of waiting for hydration to
+						    decide who mounts. */}
+						<Scene
+							hoveredId={hoveredId}
+							onHoverChange={setHoveredId}
+							debug={debug === true}
+						/>
+						<SceneMobile />
 					</div>
 				)}
 				<SectionNav

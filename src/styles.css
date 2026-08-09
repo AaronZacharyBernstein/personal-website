@@ -138,3 +138,41 @@ body,
     color: var(--foreground);
   }
 }
+
+/*
+ * Scene art. Both variants are server-rendered and both stay in the DOM at
+ * every width; these two queries are the only thing that decides which one
+ * is visible and — because a url() sitting in an unsubstituted custom
+ * property is an inert token, not a resource — which one is ever fetched.
+ * A viewport below md never resolves --layer-image, so it never downloads
+ * the eight layers; a viewport at or above md never resolves
+ * --scene-mobile-image.
+ *
+ * Deliberately no background-color on either: a fill under a background
+ * that has not decoded yet is the load flash these rules exist to remove.
+ * The box stays empty until the art is ready to paint in one step.
+ *
+ * Unlayered, so they outrank Tailwind's utility layer and a stray bg-*
+ * class can never quietly reintroduce that fill.
+ */
+@media (min-width: 768px) {
+  [data-scene-layer] {
+    background-image: var(--layer-image);
+    /* Not `contain`: the box is aspect-locked to the art (verified by
+       trace-hotspot-polygons, which warns past 1% drift), so filling it
+       exactly is equivalent and survives the encoder's rounding of the
+       downscaled height. */
+    background-size: 100% 100%;
+    background-repeat: no-repeat;
+  }
+}
+
+@media (max-width: 767px) {
+  [data-scene-mobile] {
+    background-image: var(--scene-mobile-image);
+    /* Matches the object-cover this element replaced. */
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+  }
+}

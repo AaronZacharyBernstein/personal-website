@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SceneRouteImport } from './routes/_scene'
 import { Route as SceneIndexRouteImport } from './routes/_scene.index'
+import { Route as SceneEducationRouteImport } from './routes/_scene.education'
 import { Route as SceneGithubRouteImport } from './routes/_scene.github'
 import { Route as SceneLinksRouteImport } from './routes/_scene.links'
 import { Route as SceneProjectsRouteImport } from './routes/_scene.projects'
@@ -25,6 +26,11 @@ const SceneRoute = SceneRouteImport.update({
 const SceneIndexRoute = SceneIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => SceneRoute,
+} as any)
+const SceneEducationRoute = SceneEducationRouteImport.update({
+  id: '/education',
+  path: '/education',
   getParentRoute: () => SceneRoute,
 } as any)
 const SceneGithubRoute = SceneGithubRouteImport.update({
@@ -60,6 +66,7 @@ const ApiTrpcSplatRoute = ApiTrpcSplatRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof SceneIndexRoute
+  '/education': typeof SceneEducationRoute
   '/github': typeof SceneGithubRoute
   '/links': typeof SceneLinksRoute
   '/projects': typeof SceneProjectsRoute
@@ -68,6 +75,7 @@ export interface FileRoutesByFullPath {
   '/api/trpc/$': typeof ApiTrpcSplatRoute
 }
 export interface FileRoutesByTo {
+  '/education': typeof SceneEducationRoute
   '/github': typeof SceneGithubRoute
   '/links': typeof SceneLinksRoute
   '/projects': typeof SceneProjectsRoute
@@ -79,6 +87,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_scene': typeof SceneRouteWithChildren
+  '/_scene/education': typeof SceneEducationRoute
   '/_scene/github': typeof SceneGithubRoute
   '/_scene/links': typeof SceneLinksRoute
   '/_scene/projects': typeof SceneProjectsRoute
@@ -91,6 +100,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/education'
     | '/github'
     | '/links'
     | '/projects'
@@ -99,6 +109,7 @@ export interface FileRouteTypes {
     | '/api/trpc/$'
   fileRoutesByTo: FileRoutesByTo
   to:
+    | '/education'
     | '/github'
     | '/links'
     | '/projects'
@@ -109,6 +120,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/_scene'
+    | '/_scene/education'
     | '/_scene/github'
     | '/_scene/links'
     | '/_scene/projects'
@@ -137,6 +149,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof SceneIndexRouteImport
+      parentRoute: typeof SceneRoute
+    }
+    '/_scene/education': {
+      id: '/_scene/education'
+      path: '/education'
+      fullPath: '/education'
+      preLoaderRoute: typeof SceneEducationRouteImport
       parentRoute: typeof SceneRoute
     }
     '/_scene/github': {
@@ -185,6 +204,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface SceneRouteChildren {
+  SceneEducationRoute: typeof SceneEducationRoute
   SceneGithubRoute: typeof SceneGithubRoute
   SceneLinksRoute: typeof SceneLinksRoute
   SceneProjectsRoute: typeof SceneProjectsRoute
@@ -194,6 +214,7 @@ interface SceneRouteChildren {
 }
 
 const SceneRouteChildren: SceneRouteChildren = {
+  SceneEducationRoute: SceneEducationRoute,
   SceneGithubRoute: SceneGithubRoute,
   SceneLinksRoute: SceneLinksRoute,
   SceneProjectsRoute: SceneProjectsRoute,
