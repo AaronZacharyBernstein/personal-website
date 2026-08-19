@@ -2,6 +2,7 @@ import {
 	createFileRoute,
 	Outlet,
 	retainSearchParams,
+	useRouterState,
 } from "@tanstack/react-router";
 import {
 	lazy,
@@ -13,10 +14,21 @@ import {
 } from "react";
 import { Scene } from "#/components/scene/scene";
 import { SceneMobile } from "#/components/scene/scene-mobile";
-import { SECTION_NAV_ID, SectionNav } from "#/components/scene/section-nav";
+import {
+	NAV_TOGGLE_ID,
+	SECTION_NAV_ID,
+	SectionNav,
+} from "#/components/scene/section-nav";
+import { NavOpenContext } from "#/components/section-panel";
 import type { HotspotId } from "#/config/scene";
-import { SCENE_ASPECT_RATIO, SCENE_MAX_WIDTH } from "#/config/scene";
+import {
+	DESKTOP_MEDIA_QUERY,
+	SCENE_ASPECT_RATIO,
+	SCENE_HOTSPOTS,
+	SCENE_MAX_WIDTH,
+} from "#/config/scene";
 import { useMediaQuery } from "#/hooks/use-media-query";
+import { cn } from "#/lib/utils.ts";
 
 /** Lazy so the calibration bundle never loads on a normal page view. */
 const CalibrationTool = lazy(
@@ -33,8 +45,6 @@ interface SceneSearch {
 function isFlagOn(value: unknown): boolean {
 	return value === 1 || value === "1" || value === true;
 }
-
-const DESKTOP_MEDIA_QUERY = "(min-width: 768px)";
 
 export const Route = createFileRoute("/_scene")({
 	validateSearch: (search: Record<string, unknown>): SceneSearch => {
@@ -64,6 +74,21 @@ function SceneLayout() {
 	const [navOpen, setNavOpen] = useState(false);
 	const navButtonRef = useRef<HTMLButtonElement | null>(null);
 	const { debug, calibrate } = Route.useSearch();
+	// A section panel is open iff a hotspot route is matched. Route-derived,
+	// so it is known on the server and a cold /resume load renders the scene
+	// inert (and hidden below md) with no hydration disagreement. Derived
+	// from the MATCHES, not the pathname string: the router matches routes
+	// case-insensitively, so a cold /Resume load renders the panel — and a
+	// pathname comparison would miss it, leaving the scene live behind the
+	// dialog.
+	const sectionOpen = useRouterState({
+		select: (s) =>
+			s.matches.some((match) =>
+				SCENE_HOTSPOTS.some(
+					(hotspot) => match.routeId === `/_scene${hotspot.route}`,
+				),
+			),
+	});
 	// Client-only chrome only. The scene itself no longer consults this: its
 	// two variants both render on the server and hide themselves in CSS, so
 	// nothing about the art waits on hydration. What is left needs the real
@@ -74,22 +99,35 @@ function SceneLayout() {
 	// Every close path must also clear the hover-sync state: a link hidden
 	// under a stationary pointer never fires mouseleave, so a hovered layer
 	// would otherwise stay lifted (with its label chip) indefinitely.
-	const closeNav = useCallback(() => {
+	const closeNav = useCallback((options?: { refocus?: boolean }) => {
 		setNavOpen(false);
 		setHoveredId(null);
 		// And every close path must park focus somewhere real, or the
 		// focused link goes visibility:hidden and focus falls to <body>.
 		// Below md the button is display:none and this is a no-op.
-		navButtonRef.current?.focus();
+		// refocus false is for the one close path where something else is
+		// about to take focus — choosing a section link, whose panel focuses
+		// its own dialog on mount. Refocusing the toggle there loses the
+		// race against the panel's mount effect and steals focus back out
+		// of the dialog.
+		if (options?.refocus !== false) {
+			navButtonRef.current?.focus();
+		}
 	}, []);
 
-	// Escape closes the panel and hands focus back to the toggle button.
+	// Escape closes the nav and hands focus back to the toggle button. The
+	// nav always outranks a section panel: this listener only exists while
+	// the nav is open, and SectionPanel's own listener yields whenever
+	// NavOpenContext says it is — so one keypress never closes both.
+	// preventDefault is belt and braces on top of that: the panel also
+	// ignores any Escape something else has already claimed.
 	useEffect(() => {
 		if (!navOpen) {
 			return;
 		}
 		const handleKeyDown = (event: KeyboardEvent) => {
 			if (event.key === "Escape") {
+				event.preventDefault();
 				closeNav();
 			}
 		};
@@ -103,6 +141,7 @@ function SceneLayout() {
 			    so below md there is no button and no collapsed state. */}
 			<button
 				ref={navButtonRef}
+				id={NAV_TOGGLE_ID}
 				type="button"
 				aria-expanded={navOpen}
 				aria-controls={SECTION_NAV_ID}
@@ -119,7 +158,11 @@ function SceneLayout() {
 						setNavOpen(true);
 					}
 				}}
-				className="fixed top-4 right-4 z-50 hidden size-10 items-center justify-center rounded-md border bg-background shadow-sm hover:bg-accent focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none md:inline-flex"
+				// right offset includes --scroll-lock-gap: an open panel removes
+				// the page scrollbar, which widens the viewport that fixed
+				// elements position against; the panel publishes the vanished
+				// width so this chrome doesn't jump right by a scrollbar.
+				className="fixed top-4 right-[calc(1rem+var(--scroll-lock-gap,0px))] z-50 hidden size-10 items-center justify-center rounded-md border bg-background shadow-sm hover:bg-accent focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none md:inline-flex"
 			>
 				<svg
 					viewBox="0 0 24 24"
@@ -154,7 +197,19 @@ function SceneLayout() {
 					// isolate: the scene's internal z-indexes must never paint
 					// above the fixed z-50 nav chrome.
 					<div
-						className="relative isolate w-full overflow-hidden"
+						className={cn(
+							"relative isolate w-full overflow-hidden",
+							// Below md the scene is purely decorative, so an open
+							// section hides it outright: a phone gets the content
+							// and nothing else, and a display:none subtree never
+							// fetches its background art.
+							sectionOpen && "max-md:hidden",
+						)}
+						// While a panel is open the scene must not be hoverable,
+						// clickable, or tabbable. inert covers pointer AND
+						// keyboard/AT; unlike the nav's, this one can be
+						// server-rendered because sectionOpen is route state.
+						inert={sectionOpen}
 						style={{
 							maxWidth: SCENE_MAX_WIDTH,
 							aspectRatio: `${SCENE_ASPECT_RATIO} / 1`,
@@ -180,7 +235,16 @@ function SceneLayout() {
 					hoveredId={hoveredId}
 					onHoverChange={setHoveredId}
 					open={navOpen}
-					onLinkClick={closeNav}
+					// A section link's panel takes focus itself; refocusing the
+					// toggle would steal it back out of the dialog. Home mounts
+					// no panel, so there the toggle must still catch focus.
+					onLinkClick={(route) =>
+						closeNav({
+							refocus: !SCENE_HOTSPOTS.some(
+								(hotspot) => hotspot.route === route,
+							),
+						})
+					}
 					// Belt and braces with the CSS visibility collapse: inert
 					// drops the links out of the tab order the instant the nav
 					// closes, covering the 200ms closing fade during which
@@ -188,14 +252,16 @@ function SceneLayout() {
 					// md the list is the sole navigation, and pre-hydration
 					// (isDesktop null) the SSR'd visibility rule covers it.
 					inert={isDesktop === true && !navOpen}
+					hideBelowMd={sectionOpen}
 				/>
 			</div>
-			{/* Section content mounts here. How each panel presents itself
-			    (overlay, replace, beside) is decided per section in a later
-			    phase; this container deliberately has no opinion. */}
-			<div data-section-outlet className="mt-6">
+			{/* Section content mounts here. Every section renders a
+			    SectionPanel, which positions itself (fixed overlay on
+			    desktop, full page on mobile), so no wrapper box is needed —
+			    only the nav state the panel's Escape handler must yield to. */}
+			<NavOpenContext.Provider value={navOpen}>
 				<Outlet />
-			</div>
+			</NavOpenContext.Provider>
 		</div>
 	);
 }

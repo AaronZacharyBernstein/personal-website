@@ -1,5 +1,14 @@
 export const SCENE_ASPECT_RATIO = 2; // width / height
 
+/**
+ * Matches Tailwind's `md` breakpoint — the cutover between the interactive
+ * desktop scene and the decorative mobile one. JS mirror of the media
+ * queries in styles.css; if the breakpoint ever moves, change both together
+ * or hover/inert logic and the visible variant will disagree about which
+ * side of the line a viewport is on.
+ */
+export const DESKTOP_MEDIA_QUERY = "(min-width: 768px)";
+
 /** Max rendered width of the scene box. Tune here, nowhere else. */
 export const SCENE_MAX_WIDTH = "72rem";
 

@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { SectionPanel } from "#/components/section-panel";
 import { sectionLabel } from "#/config/scene";
-import { TIMELINE } from "#/content/timeline";
+import { TIMELINE, type WorkEntry } from "#/content/timeline";
 
 export const Route = createFileRoute("/_scene/timeline")({
 	head: () => ({ meta: [{ title: sectionLabel("/timeline") }] }),
@@ -9,15 +10,23 @@ export const Route = createFileRoute("/_scene/timeline")({
 
 function TimelineSection() {
 	// The "work" half of the shared timeline; /education takes "school".
-	const entries = TIMELINE.filter((entry) => entry.kind === "work");
+	// Still a placeholder rendering: the real view is a later phase.
+	const entries = TIMELINE.filter(
+		(entry): entry is WorkEntry => entry.kind === "work",
+	);
 	return (
-		<div>
-			{sectionLabel(Route.fullPath)}
-			{entries.map((entry) => (
-				<p key={`${entry.organization}-${entry.startDate}`}>
-					{entry.organization} — {entry.role}
+		<SectionPanel title={sectionLabel(Route.fullPath)}>
+			{entries.length === 0 ? (
+				<p className="text-muted-foreground">
+					The work timeline will appear here in a later phase.
 				</p>
-			))}
-		</div>
+			) : (
+				entries.map((entry) => (
+					<p key={`${entry.organization}-${entry.positions[0].startDate}`}>
+						{entry.organization} — {entry.positions[0].title}
+					</p>
+				))
+			)}
+		</SectionPanel>
 	);
 }
