@@ -16,7 +16,8 @@ interface ContactLink {
 
 export interface ResumeContact {
 	name: string;
-	phone: string;
+	/** label as printed ("925-899-8925"), url in E.164 ("tel:+19258998925"). */
+	phone: ContactLink;
 	email: string;
 	/** As printed, e.g. "Walnut Creek, CA". */
 	location: string;
@@ -28,7 +29,10 @@ export interface ResumeContact {
 
 export const RESUME_CONTACT: ResumeContact = {
 	name: "Aaron Bernstein",
-	phone: "925-899-8925",
+	phone: {
+		label: "925-899-8925",
+		url: "tel:+19258998925",
+	},
 	email: "aaronbernstein2005@gmail.com",
 	location: "Walnut Creek, CA",
 	linkedin: {

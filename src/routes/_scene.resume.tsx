@@ -89,45 +89,73 @@ function ExternalLink({
 }
 
 /**
- * Contact items in print order. Each renders glued to its trailing
- * separator dot inside one nowrap flex child, so a wrapped line can end
- * with a dot but never start with one.
+ * Contact details in the PDF's own two-line grouping — reach-me first
+ * (phone · email · location), then profiles (linkedin · github · site) —
+ * rather than one long line wrapping wherever it runs out of room. Each
+ * line centers independently. Within a line, each item renders glued to
+ * its trailing separator dot inside one nowrap flex child, so a wrapped
+ * row can end with a dot but never start with one.
  */
-const CONTACT_ITEMS: Array<{ key: string; node: ReactNode }> = [
-	{ key: "phone", node: RESUME_CONTACT.phone },
+const CONTACT_LINES: Array<{
+	key: string;
+	items: Array<{ key: string; node: ReactNode }>;
+}> = [
 	{
-		key: "email",
-		node: (
-			<a href={`mailto:${RESUME_CONTACT.email}`} className={MUTED_LINK_CLASS}>
-				{RESUME_CONTACT.email}
-			</a>
-		),
+		key: "reach",
+		items: [
+			{
+				key: "phone",
+				node: (
+					// tel: link on every platform — desktop handlers (FaceTime,
+					// Phone Link) exist too, so no branching.
+					<a href={RESUME_CONTACT.phone.url} className={MUTED_LINK_CLASS}>
+						{RESUME_CONTACT.phone.label}
+					</a>
+				),
+			},
+			{
+				key: "email",
+				node: (
+					<a
+						href={`mailto:${RESUME_CONTACT.email}`}
+						className={MUTED_LINK_CLASS}
+					>
+						{RESUME_CONTACT.email}
+					</a>
+				),
+			},
+			{ key: "location", node: RESUME_CONTACT.location },
+		],
 	},
-	{ key: "location", node: RESUME_CONTACT.location },
 	{
-		key: "linkedin",
-		node: (
-			<ExternalLink
-				href={RESUME_CONTACT.linkedin.url}
-				className={MUTED_LINK_CLASS}
-			>
-				{RESUME_CONTACT.linkedin.label}
-			</ExternalLink>
-		),
+		key: "profiles",
+		items: [
+			{
+				key: "linkedin",
+				node: (
+					<ExternalLink
+						href={RESUME_CONTACT.linkedin.url}
+						className={MUTED_LINK_CLASS}
+					>
+						{RESUME_CONTACT.linkedin.label}
+					</ExternalLink>
+				),
+			},
+			{
+				key: "github",
+				node: (
+					<ExternalLink
+						href={RESUME_CONTACT.github.url}
+						className={MUTED_LINK_CLASS}
+					>
+						{RESUME_CONTACT.github.label}
+					</ExternalLink>
+				),
+			},
+			// Unlinked on purpose: the reader is already here.
+			{ key: "website", node: RESUME_CONTACT.website },
+		],
 	},
-	{
-		key: "github",
-		node: (
-			<ExternalLink
-				href={RESUME_CONTACT.github.url}
-				className={MUTED_LINK_CLASS}
-			>
-				{RESUME_CONTACT.github.label}
-			</ExternalLink>
-		),
-	},
-	// Unlinked on purpose: the reader is already here.
-	{ key: "website", node: RESUME_CONTACT.website },
 ];
 
 /**
@@ -206,13 +234,36 @@ function ResumeSection() {
 	return (
 		<SectionPanel title={sectionLabel(Route.fullPath)}>
 			<article>
-				<header>
-					<div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
-						<h2 className="text-3xl font-semibold tracking-tight">
-							{RESUME_CONTACT.name}
-						</h2>
-						{/* Secondary by design: recruiters want the file, but the
-						    document on this page is the primary artifact. */}
+				{/* Centered like the printed page; every section below stays
+				    left-aligned. */}
+				<header className="text-center">
+					<h2 className="text-3xl font-semibold tracking-tight">
+						{RESUME_CONTACT.name}
+					</h2>
+					<div className="mt-2 space-y-0.5 text-sm text-muted-foreground">
+						{CONTACT_LINES.map((line) => (
+							<p
+								key={line.key}
+								className="flex flex-wrap justify-center gap-x-2 gap-y-0.5"
+							>
+								{line.items.map((item, index) => (
+									<span key={item.key} className="whitespace-nowrap">
+										{item.node}
+										{index < line.items.length - 1 && (
+											<span aria-hidden="true" className="ml-2">
+												·
+											</span>
+										)}
+									</span>
+								))}
+							</p>
+						))}
+					</div>
+					{/* Secondary by design: recruiters want the file, but the
+					    document on this page is the primary artifact — so it sits
+					    under the contact block instead of competing with the name
+					    for the header row. */}
+					<p className="mt-3">
 						<a
 							href={RESUME_META.pdfPath}
 							download
@@ -220,18 +271,6 @@ function ResumeSection() {
 						>
 							Download PDF
 						</a>
-					</div>
-					<p className="mt-2 flex flex-wrap gap-x-2 gap-y-0.5 text-sm text-muted-foreground">
-						{CONTACT_ITEMS.map((item, index) => (
-							<span key={item.key} className="whitespace-nowrap">
-								{item.node}
-								{index < CONTACT_ITEMS.length - 1 && (
-									<span aria-hidden="true" className="ml-2">
-										·
-									</span>
-								)}
-							</span>
-						))}
 					</p>
 				</header>
 
