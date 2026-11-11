@@ -1,4 +1,15 @@
-export const SCENE_ASPECT_RATIO = 2; // width / height
+// Relative, not "#/": the image scripts load this file through tsx.
+import { SAY_HI_URL } from "../content/contact";
+
+/**
+ * Pixel size of board.png after the pipeline's trim. The scene IS the board,
+ * so this pair is the scene's aspect ratio; `npm run optimize-images` fails
+ * if the real file ever disagrees with it.
+ */
+export const SCENE_BOARD_PIXELS = { width: 1319, height: 889 } as const;
+
+export const SCENE_ASPECT_RATIO =
+	SCENE_BOARD_PIXELS.width / SCENE_BOARD_PIXELS.height; // width / height
 
 /**
  * Matches Tailwind's `md` breakpoint — the cutover between the interactive
@@ -12,21 +23,69 @@ export const DESKTOP_MEDIA_QUERY = "(min-width: 768px)";
 /** Max rendered width of the scene box. Tune here, nowhere else. */
 export const SCENE_MAX_WIDTH = "72rem";
 
+/**
+ * SCENE_MAX_WIDTH in pixels at the default root font size. Lengths that
+ * must scale with the board (shadows) are authored in pixels at this width
+ * and converted to container units, so they read as "what it looks like at
+ * full size".
+ */
+export const SCENE_REFERENCE_WIDTH = 1152;
+
+/**
+ * Vertical room the desktop board leaves free when it shrinks to fit the
+ * viewport height: the page's py-6 gutters plus a little air, so the whole
+ * board is visible without scrolling.
+ */
+export const SCENE_FIT_MARGIN = "4rem";
+
+/**
+ * The usable cork: the area inside the frame's inner outline, normalized,
+ * with a small inset for the outline's hand-drawn wobble. Every item must
+ * sit inside it; `npm run check-scene` enforces that and `?debug=1` draws it.
+ */
+export const SCENE_CORK = {
+	x0: 0.066,
+	y0: 0.106,
+	x1: 0.926,
+	y1: 0.898,
+} as const;
+
 export type HotspotId =
 	| "resume"
-	| "links"
-	| "github"
 	| "projects"
-	| "timeline"
-	| "education";
+	| "career"
+	| "education"
+	| "github"
+	| "links"
+	| "say-hi";
 
 export type SectionRoute =
 	| "/resume"
-	| "/links"
-	| "/github"
 	| "/projects"
 	| "/timeline"
-	| "/education";
+	| "/education"
+	| "/github"
+	| "/links";
+
+export type TackColor = "red" | "yellow" | "green" | "blue";
+export type TackVariant = 1 | 2 | 3;
+
+/**
+ * The thumbtack holding an item to the board. Fixed here, never chosen at
+ * runtime: a random pick on the server and another on the client is a
+ * hydration mismatch.
+ */
+export interface TackSpec {
+	color: TackColor;
+	/** 1 is head-on; 2 and 3 are tilted right and left. Never rotated in CSS. */
+	variant: TackVariant;
+	/**
+	 * Where the tack sits, as a point inside the item's own box (0..1 on each
+	 * axis, before rotation). It is also the item's pivot: `rotation` and the
+	 * hover swing both turn about this point, the way a pinned sheet does.
+	 */
+	at: [number, number];
+}
 
 interface SceneLayerBase {
 	id: string;
@@ -36,130 +95,163 @@ interface SceneLayerBase {
 	 * `npm run optimize-images` after touching one.
 	 */
 	image: string;
-	/** Normalized 0..1 bounding box. */
+	/**
+	 * Normalized 0..1 bounding box of the art before rotation. Its aspect
+	 * must match the trimmed art; `npm run optimize-images -- --lock`
+	 * rewrites `height` from `width` to keep it so.
+	 */
 	box: { x: number; y: number; width: number; height: number };
 	zIndex: number;
-	/** Debug stroke and load-failure fallback fill. */
+	/** Debug stroke and calibration outline. */
 	placeholderColor: string;
+	/**
+	 * Degrees clockwise, applied in CSS about the tack point (the box centre
+	 * for an item with no tack). The hit polygon gets the same transform
+	 * through scene-geometry's projectToScene, so the two cannot drift.
+	 */
+	rotation?: number;
+	tack?: TackSpec;
 }
 
 export interface DecorativeLayer extends SceneLayerBase {
 	kind: "decorative";
 }
 
-export interface HotspotLayer extends SceneLayerBase {
+interface HotspotLayerBase extends SceneLayerBase {
 	kind: "hotspot";
 	id: HotspotId;
 	label: string;
-	route: SectionRoute;
+	tack: TackSpec;
 	/**
-	 * Normalized 0..1 points defining the clickable shape. Machine-generated:
-	 * re-run `npx tsx scripts/trace-hotspot-polygons.ts` and paste the block
-	 * verbatim whenever a box moves. Because these blocks are replaced
-	 * wholesale, biome.json turns `noApproximativeNumericConstant` off for
-	 * this file — a vertex landing on 0.7071 is a coincidence, not
-	 * `Math.SQRT1_2`, and an inline biome-ignore would not survive the paste.
+	 * The clickable shape, as points inside the item's own box (0..1 on each
+	 * axis, before rotation) — a function of the art alone, so it follows the
+	 * item when its box moves, resizes or rotates. Machine-generated: run
+	 * `npm run trace-polygons -- --write` after changing a hotspot's art.
+	 * Because these blocks are replaced wholesale, biome.json turns
+	 * `noApproximativeNumericConstant` off for this file — a vertex landing
+	 * on 0.7071 is a coincidence, not `Math.SQRT1_2`.
 	 */
 	polygon: Array<[number, number]>;
 }
 
+/** Opens a section route in the panel. */
+export interface SectionHotspotLayer extends HotspotLayerBase {
+	route: SectionRoute;
+	href?: undefined;
+}
+
+/** Opens an external URL in a new tab; it has no route and no panel. */
+export interface ExternalHotspotLayer extends HotspotLayerBase {
+	href: string;
+	route?: undefined;
+}
+
+export type HotspotLayer = SectionHotspotLayer | ExternalHotspotLayer;
+
 export type SceneLayer = DecorativeLayer | HotspotLayer;
+
+/** The board itself: fills the scene, casts no shadow, fades in first. */
+export const SCENE_BOARD_ID = "board";
+/** Drops last in the intro, and nothing may overlap it. */
+export const SCENE_NAME_CARD_ID = "name-card";
+
+/**
+ * Rendered tack height as a fraction of the scene's WIDTH (the same unit as
+ * a box width, so a tack keeps its size against the items around it).
+ */
+export const SCENE_TACK_HEIGHT = 0.019;
+
+/** width / height of each trimmed tack variant; optimize-images checks it. */
+export const SCENE_TACK_ASPECT: Record<TackVariant, number> = {
+	1: 0.982,
+	2: 0.776,
+	3: 0.808,
+};
+
+/** How far a hovered item swings about its tack, in degrees. */
+export const SCENE_HOVER_SWING = 2;
+
+export interface SceneShadow {
+	/** Pixels at SCENE_REFERENCE_WIDTH. Positive x is right, positive y down. */
+	x: number;
+	y: number;
+	blur: number;
+	opacity: number;
+}
+
+/**
+ * One light for the whole board, from the top left: every shadow falls down
+ * and to the right. `rest` is what every item and tack wears, `hover` is the
+ * slightly lifted item, and `falling` is where an item's shadow starts in
+ * the intro before it tightens to `rest`.
+ */
+export const SCENE_SHADOWS = {
+	rest: { x: 2, y: 3, blur: 4, opacity: 0.4 },
+	hover: { x: 4, y: 7, blur: 10, opacity: 0.34 },
+	falling: { x: 12, y: 20, blur: 26, opacity: 0.2 },
+} as const satisfies Record<string, SceneShadow>;
 
 /**
  * The whole scene, one ordered list. Paint order is zIndex, never array
  * order. Hotspot array order defines nav and tab order (reader scan order:
  * top row left to right, then bottom row), so reordering z never reorders
- * the nav.
+ * the nav. Tack layers are not listed: each is derived from its item's
+ * `tack` (see scene-geometry), so a tack always travels with its item.
  */
 export const SCENE_LAYERS: ReadonlyArray<SceneLayer> = [
 	{
-		/**
-		 * Aspect-locked like every other layer (2*width/height == the 3:1 of
-		 * desk.png), so the box is fixed by two choices: content spans scene
-		 * x 0.03..0.97 (cream field on both sides, nothing bleeding off), and
-		 * the slab bottom lands at y 0.925 (a 7.5% cream strip below it).
-		 * Everything else follows from desk.png's own alpha: content occupies
-		 * image fx 0.0368..0.9885 and fy 0.2901..0.7169, with the front-edge
-		 * outline at fy 0.6492. That puts the surface line at 0.6440, the
-		 * front edge at 0.8805 and the visible slab at 28.1% of scene height
-		 * — the reference is 17.9%, and the whole excess is tabletop depth
-		 * baked into the asset (content aspect 6.69 against the reference's
-		 * 10.92). Fixing it needs a re-crop, not a different box.
-		 */
 		kind: "decorative",
-		id: "desk",
-		image: "/images/desk.webp",
-		box: { x: -0.0064, y: 0.453, width: 0.9878, height: 0.6585 },
-		zIndex: 10,
+		id: "board",
+		image: "/images/board.webp",
+		box: { x: 0, y: 0, width: 1, height: 1 },
+		zIndex: 0,
 		placeholderColor: "#64748b",
 	},
 	{
-		/**
-		 * Aspect-locked to the 1023x1537 asset (2*width/height == 0.66558),
-		 * then pinned by three things: centered on 0.500, head top at 0.1366,
-		 * and — because the figure is cropped flat at the image's bottom edge
-		 * — a crop line at 0.6618 that clears the desk's back edge by 8.9 CSS
-		 * px at a 1440 viewport, measured at alpha 250 so the desk's own
-		 * anti-aliased top row is not counted as cover. Width comes from
-		 * preserving the previous asset's rendered body width (0.1817) across
-		 * the new art's 1.3% transparent side margin. Re-derive all four
-		 * numbers from the image if the art is replaced again; do not carry a
-		 * width/height pair over from a different asset.
-		 */
 		kind: "decorative",
-		id: "aaron",
-		image: "/images/aaron.webp",
-		box: { x: 0.408, y: 0.1089, width: 0.184, height: 0.5529 },
-		zIndex: 5,
+		id: "name-card",
+		image: "/images/name-card.webp",
+		box: { x: 0.355, y: 0.118, width: 0.29, height: 0.1519 },
+		zIndex: 90,
 		placeholderColor: "#ec4899",
+		tack: { color: "red", variant: 1, at: [0.945, 0.2] },
 	},
 	{
 		kind: "hotspot",
-		id: "timeline",
-		label: "Timeline",
-		route: "/timeline",
-		image: "/images/chalkboard.webp",
-		box: { x: -0.0472, y: 0.0671, width: 0.5297, height: 0.4903 },
-		zIndex: 15,
-		placeholderColor: "#8b5cf6",
+		id: "resume",
+		label: "Resume",
+		route: "/resume",
+		image: "/images/resume.webp",
+		box: { x: 0.085, y: 0.135, width: 0.215, height: 0.4198 },
+		zIndex: 10,
+		placeholderColor: "#f59e0b",
+		rotation: -2,
+		tack: { color: "blue", variant: 2, at: [0.5, 0.045] },
 		polygon: [
-			[0.0394, 0.1145],
-			[0.389, 0.1151],
-			[0.389, 0.4571],
-			[0.3896, 0.4594],
-			[0.3893, 0.4732],
-			[0.0397, 0.4738],
-			[0.0391, 0.4565],
-		],
-	},
-	{
-		// Immediately after timeline: the two boards are adjacent on the wall,
-		// and array order is the nav/tab/roving order.
-		kind: "hotspot",
-		id: "education",
-		label: "Education",
-		route: "/education",
-		image: "/images/whiteboard.webp",
-		box: { x: 0.6088, y: 0.0894, width: 0.3642, height: 0.4099 },
-		zIndex: 4,
-		placeholderColor: "#14b8a6",
-		polygon: [
-			[0.9435, 0.1144],
-			[0.9557, 0.1162],
-			[0.9594, 0.1219],
-			[0.9607, 0.1301],
-			[0.9609, 0.4263],
-			[0.9603, 0.4451],
-			[0.9579, 0.452],
-			[0.9337, 0.4538],
-			[0.9319, 0.4729],
-			[0.6584, 0.4738],
-			[0.6505, 0.4716],
-			[0.6492, 0.4529],
-			[0.6298, 0.4533],
-			[0.6231, 0.4455],
-			[0.6215, 0.1314],
-			[0.6252, 0.1179],
+			[0.929, 0.0018],
+			[0.9487, 0.0061],
+			[0.9572, 0.0225],
+			[0.9534, 0.2891],
+			[0.96, 0.4886],
+			[0.976, 0.6401],
+			[0.9873, 0.8703],
+			[0.9976, 0.9496],
+			[0.992, 0.9646],
+			[0.9751, 0.9703],
+			[0.9139, 0.9753],
+			[0.5339, 0.9918],
+			[0.0127, 0.9954],
+			[0.0042, 0.9875],
+			[0.0033, 0.9746],
+			[0.0174, 0.7938],
+			[0.0193, 0.5407],
+			[0.0268, 0.3785],
+			[0.0259, 0.2327],
+			[0.0127, 0.0733],
+			[0.0165, 0.0533],
+			[0.0315, 0.0461],
+			[0.1218, 0.0404],
+			[0.421, 0.0332],
 		],
 	},
 	{
@@ -167,81 +259,113 @@ export const SCENE_LAYERS: ReadonlyArray<SceneLayer> = [
 		id: "projects",
 		label: "Projects",
 		route: "/projects",
-		image: "/images/computer.webp",
-		box: { x: 0.3504, y: 0.4765, width: 0.2925, height: 0.3608 },
+		image: "/images/projects.webp",
+		box: { x: 0.375, y: 0.31, width: 0.225, height: 0.2247 },
 		zIndex: 20,
 		placeholderColor: "#3b82f6",
+		rotation: 1.5,
+		tack: { color: "green", variant: 3, at: [0.52, 0.2] },
 		polygon: [
-			[0.5805, 0.506],
-			[0.6012, 0.5071],
-			[0.606, 0.5133],
-			[0.6086, 0.5243],
-			[0.5939, 0.7353],
-			[0.5921, 0.7485],
-			[0.5842, 0.7694],
-			[0.4369, 0.8056],
-			[0.3825, 0.7419],
-			[0.3816, 0.7192],
-			[0.3847, 0.7118],
-			[0.4272, 0.7001],
-			[0.4324, 0.5481],
-			[0.4386, 0.5261],
-			[0.467, 0.5177],
+			[0.291, 0.0036],
+			[0.33, 0.0119],
+			[0.3592, 0.0894],
+			[0.3703, 0.0987],
+			[0.9072, 0.047],
+			[0.9496, 0.0594],
+			[0.96, 0.0852],
+			[0.9635, 0.1286],
+			[0.9955, 0.7784],
+			[0.9983, 0.8931],
+			[0.9906, 0.9292],
+			[0.9774, 0.9427],
+			[0.951, 0.9468],
+			[0.5511, 0.9737],
+			[0.0949, 0.9964],
+			[0.0372, 0.9964],
+			[0.0212, 0.985],
+			[0.0115, 0.9199],
+			[0.0024, 0.2846],
+			[0.0017, 0.1989],
+			[0.0094, 0.1513],
+			[0.0414, 0.1142],
+			[0.0567, 0.0439],
+			[0.0741, 0.0232],
 		],
 	},
 	{
 		kind: "hotspot",
-		id: "links",
-		label: "Links",
-		route: "/links",
-		image: "/images/phone.webp",
-		box: { x: 0.6876, y: 0.7331, width: 0.0546, height: 0.126 },
-		zIndex: 35,
-		placeholderColor: "#10b981",
-		polygon: [
-			[0.7118, 0.7386],
-			[0.7166, 0.7401],
-			[0.7202, 0.7459],
-			[0.7407, 0.8169],
-			[0.7403, 0.8252],
-			[0.7382, 0.8294],
-			[0.7194, 0.8488],
-			[0.7133, 0.8534],
-			[0.7098, 0.8519],
-			[0.7071, 0.8461],
-			[0.6989, 0.8067],
-			[0.6911, 0.776],
-			[0.6891, 0.7624],
-			[0.6898, 0.7533],
-			[0.6913, 0.7492],
-		],
-	},
-	{
-		kind: "hotspot",
-		id: "resume",
-		label: "Resume",
-		route: "/resume",
-		image: "/images/paper.webp",
-		box: { x: 0.1844, y: 0.6848, width: 0.1529, height: 0.1645 },
+		id: "career",
+		label: "Career",
+		route: "/timeline",
+		image: "/images/career.webp",
+		box: { x: 0.625, y: 0.305, width: 0.152, height: 0.297 },
 		zIndex: 30,
-		placeholderColor: "#f59e0b",
+		placeholderColor: "#8b5cf6",
+		rotation: 2,
+		tack: { color: "yellow", variant: 1, at: [0.5, 0.035] },
 		polygon: [
-			[0.2283, 0.6997],
-			[0.2357, 0.7053],
-			[0.2459, 0.7001],
-			[0.2843, 0.7271],
-			[0.327, 0.7387],
-			[0.3243, 0.745],
-			[0.3317, 0.7505],
-			[0.3273, 0.7591],
-			[0.3272, 0.7875],
-			[0.3311, 0.787],
-			[0.2727, 0.8295],
-			[0.1928, 0.7745],
-			[0.19, 0.7693],
-			[0.1921, 0.7398],
-			[0.1886, 0.7351],
-			[0.2161, 0.719],
+			[0.4707, 0.0021],
+			[0.8439, 0.0347],
+			[0.934, 0.0758],
+			[0.9848, 0.1408],
+			[0.9927, 0.2393],
+			[0.9521, 0.3035],
+			[0.6263, 0.4756],
+			[0.5474, 0.5741],
+			[0.9059, 0.5766],
+			[0.9667, 0.604],
+			[0.9837, 0.9302],
+			[0.9386, 0.9799],
+			[0.0964, 0.9979],
+			[0.013, 0.9628],
+			[0.0254, 0.6134],
+			[0.1392, 0.5878],
+			[0.4504, 0.5852],
+			[0.4549, 0.5612],
+			[0.3794, 0.4756],
+			[0.0547, 0.3018],
+			[0.0085, 0.2359],
+			[0.0118, 0.1528],
+			[0.0637, 0.092],
+			[0.164, 0.0449],
+		],
+	},
+	{
+		kind: "hotspot",
+		id: "education",
+		label: "Education",
+		route: "/education",
+		image: "/images/education.webp",
+		box: { x: 0.095, y: 0.64, width: 0.19, height: 0.2257 },
+		zIndex: 40,
+		placeholderColor: "#14b8a6",
+		rotation: -3,
+		tack: { color: "red", variant: 3, at: [0.455, 0.035] },
+		polygon: [
+			[0.462, 0.0022],
+			[0.5093, 0.0264],
+			[0.5251, 0.0828],
+			[0.4835, 0.2816],
+			[0.8806, 0.4615],
+			[0.6656, 0.6164],
+			[0.7466, 0.6003],
+			[0.976, 0.6808],
+			[0.9975, 0.7355],
+			[0.9595, 0.8841],
+			[0.9215, 0.9002],
+			[0.6907, 0.8196],
+			[0.6606, 0.654],
+			[0.6384, 0.6737],
+			[0.695, 0.9575],
+			[0.6534, 0.9879],
+			[0.5394, 0.9673],
+			[0.5473, 0.8653],
+			[0.3588, 0.8966],
+			[0.1681, 0.8098],
+			[0.1918, 0.5985],
+			[0.0032, 0.4884],
+			[0.4348, 0.2833],
+			[0.4018, 0.0998],
 		],
 	},
 	{
@@ -250,26 +374,165 @@ export const SCENE_LAYERS: ReadonlyArray<SceneLayer> = [
 		label: "GitHub",
 		route: "/github",
 		image: "/images/github.webp",
-		box: { x: 0.8136, y: 0.6501, width: 0.1126, height: 0.2251 },
-		zIndex: 25,
+		box: { x: 0.335, y: 0.63, width: 0.11, height: 0.166 },
+		zIndex: 50,
 		placeholderColor: "#ef4444",
+		rotation: 4,
+		tack: { color: "yellow", variant: 2, at: [0.5, 0.08] },
 		polygon: [
-			[0.8469, 0.6757],
-			[0.8963, 0.6786],
-			[0.9006, 0.7477],
-			[0.9167, 0.7514],
-			[0.8821, 0.7766],
-			[0.8946, 0.8365],
-			[0.8429, 0.8313],
-			[0.8567, 0.8021],
-			[0.8379, 0.773],
-			[0.8605, 0.7762],
-			[0.8422, 0.7539],
-			[0.8242, 0.762],
-			[0.8411, 0.7495],
-			[0.8233, 0.7529],
-			[0.8408, 0.7482],
+			[0.491, 0.0039],
+			[0.6175, 0.0194],
+			[0.6876, 0.0439],
+			[0.8333, 0.1372],
+			[0.909, 0.2239],
+			[0.9542, 0.305],
+			[0.9847, 0.3972],
+			[0.996, 0.4994],
+			[0.9633, 0.6717],
+			[0.8842, 0.8094],
+			[0.8299, 0.8661],
+			[0.7316, 0.9328],
+			[0.535, 0.9961],
+			[0.4175, 0.9894],
+			[0.3034, 0.955],
+			[0.1475, 0.8483],
+			[0.0537, 0.715],
+			[0.013, 0.6106],
+			[0.0028, 0.5183],
+			[0.013, 0.4117],
+			[0.0401, 0.3206],
+			[0.1542, 0.1517],
+			[0.3079, 0.0472],
+			[0.3836, 0.0194],
 		],
+	},
+	{
+		kind: "hotspot",
+		id: "links",
+		label: "Links",
+		route: "/links",
+		image: "/images/links.webp",
+		box: { x: 0.505, y: 0.715, width: 0.135, height: 0.1363 },
+		zIndex: 60,
+		placeholderColor: "#10b981",
+		tack: { color: "green", variant: 1, at: [0.5, 0.11] },
+		polygon: [
+			[0.8921, 0.0036],
+			[0.9265, 0.016],
+			[0.9434, 0.0687],
+			[0.9539, 0.2949],
+			[0.9673, 0.3962],
+			[0.9722, 0.5418],
+			[0.9982, 0.8342],
+			[0.9947, 0.8631],
+			[0.9842, 0.8848],
+			[0.956, 0.8993],
+			[0.8238, 0.922],
+			[0.5018, 0.9499],
+			[0.1607, 0.9923],
+			[0.077, 0.9974],
+			[0.0538, 0.9809],
+			[0.0454, 0.953],
+			[0.0313, 0.7825],
+			[0.0032, 0.2412],
+			[0.0025, 0.1844],
+			[0.0144, 0.1513],
+			[0.0489, 0.1338],
+			[0.2233, 0.0997],
+			[0.3168, 0.0945],
+		],
+	},
+	{
+		kind: "hotspot",
+		id: "say-hi",
+		label: "Say hi",
+		href: SAY_HI_URL,
+		image: "/images/say-hi.webp",
+		box: { x: 0.755, y: 0.628, width: 0.155, height: 0.2203 },
+		zIndex: 70,
+		placeholderColor: "#0ea5e9",
+		rotation: -3,
+		tack: { color: "blue", variant: 3, at: [0.5, 0.1] },
+		polygon: [
+			[0.5005, 0.0025],
+			[0.529, 0.0075],
+			[0.5824, 0.0403],
+			[0.8062, 0.2033],
+			[0.8986, 0.2828],
+			[0.9729, 0.3623],
+			[0.9824, 0.4289],
+			[0.9929, 0.6963],
+			[0.9929, 0.922],
+			[0.971, 0.9478],
+			[0.8776, 0.9627],
+			[0.5614, 0.9697],
+			[0.0995, 0.9965],
+			[0.0605, 0.9935],
+			[0.03, 0.9687],
+			[0.0205, 0.9269],
+			[0.0214, 0.6854],
+			[0.0024, 0.4717],
+			[0.0043, 0.419],
+			[0.0129, 0.3931],
+			[0.0329, 0.3673],
+			[0.15, 0.2599],
+			[0.3462, 0.0999],
+			[0.4614, 0.0144],
+		],
+	},
+	{
+		kind: "decorative",
+		id: "pin-49ers",
+		image: "/images/pin-49ers.webp",
+		box: { x: 0.752, y: 0.112, width: 0.074, height: 0.1114 },
+		zIndex: 80,
+		placeholderColor: "#b91c1c",
+		rotation: -8,
+	},
+	{
+		kind: "decorative",
+		id: "pin-giants",
+		image: "/images/pin-giants.webp",
+		box: { x: 0.826, y: 0.116, width: 0.094, height: 0.1131 },
+		zIndex: 81,
+		placeholderColor: "#ea580c",
+		rotation: 6,
+	},
+	{
+		kind: "decorative",
+		id: "pin-kings",
+		image: "/images/pin-kings.webp",
+		box: { x: 0.792, y: 0.196, width: 0.074, height: 0.1121 },
+		zIndex: 83,
+		placeholderColor: "#7c3aed",
+		rotation: 10,
+	},
+	{
+		kind: "decorative",
+		id: "pin-sharks",
+		image: "/images/pin-sharks.webp",
+		box: { x: 0.852, y: 0.214, width: 0.07, height: 0.1071 },
+		zIndex: 82,
+		placeholderColor: "#0d9488",
+		rotation: -12,
+	},
+	{
+		kind: "decorative",
+		id: "pin-manutd",
+		image: "/images/pin-manutd.webp",
+		box: { x: 0.754, y: 0.268, width: 0.072, height: 0.1092 },
+		zIndex: 84,
+		placeholderColor: "#dc2626",
+		rotation: -5,
+	},
+	{
+		kind: "decorative",
+		id: "pin-pennstate",
+		image: "/images/pin-pennstate.webp",
+		box: { x: 0.82, y: 0.288, width: 0.072, height: 0.1092 },
+		zIndex: 85,
+		placeholderColor: "#1e3a8a",
+		rotation: 14,
 	},
 ];
 
@@ -278,10 +541,17 @@ export const SCENE_HOTSPOTS: ReadonlyArray<HotspotLayer> = SCENE_LAYERS.filter(
 	(layer): layer is HotspotLayer => layer.kind === "hotspot",
 );
 
+/** The hotspots that open a section panel (everything but external links). */
+export const SCENE_SECTION_HOTSPOTS: ReadonlyArray<SectionHotspotLayer> =
+	SCENE_HOTSPOTS.filter(
+		(hotspot): hotspot is SectionHotspotLayer => hotspot.route !== undefined,
+	);
+
 /** Label for a section route, so route files never hardcode one. */
 export function sectionLabel(route: string): string {
 	return (
-		SCENE_HOTSPOTS.find((hotspot) => hotspot.route === route)?.label ?? route
+		SCENE_SECTION_HOTSPOTS.find((hotspot) => hotspot.route === route)?.label ??
+		route
 	);
 }
 
@@ -289,10 +559,8 @@ export function sectionLabel(route: string): string {
 export const SCENE_HOME = { label: "Home", route: "/" } as const;
 
 /**
- * The flat below-md scene. Still unpainted: no source exists in
- * assets/images-src/ yet, so `npm run optimize-images` skips it and this
- * URL 404s. Because the background is applied only inside the mobile media
- * query, the miss costs a desktop visitor nothing and paints nothing on
- * mobile — the scene box simply reserves its 2:1 space until the art lands.
+ * The flat below-md scene: every layer and tack composited onto the board
+ * by `npm run optimize-images`. Applied only inside the mobile media query,
+ * so a desktop visitor never requests it.
  */
 export const SCENE_MOBILE_IMAGE = "/images/scene-flat-mobile.webp";

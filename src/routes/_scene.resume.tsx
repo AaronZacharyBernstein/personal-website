@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import type { ReactNode } from "react";
+import { ExternalLink } from "#/components/external-link";
 import { SectionPanel } from "#/components/section-panel";
 import { sectionLabel } from "#/config/scene";
 import { PROJECTS, type Project } from "#/content/projects";
@@ -66,27 +67,6 @@ const lastUpdatedLabel = new Intl.DateTimeFormat("en-US", {
 const LINK_CLASS =
 	"underline decoration-muted-foreground underline-offset-[3px] transition-colors hover:decoration-current";
 const MUTED_LINK_CLASS = `${LINK_CLASS} hover:text-foreground`;
-
-function ExternalLink({
-	href,
-	className,
-	children,
-}: {
-	href: string;
-	className?: string;
-	children: ReactNode;
-}) {
-	return (
-		<a
-			href={href}
-			target="_blank"
-			rel="noopener noreferrer"
-			className={className}
-		>
-			{children}
-		</a>
-	);
-}
 
 /**
  * Contact details in the PDF's own two-line grouping — reach-me first

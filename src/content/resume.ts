@@ -8,6 +8,10 @@
  * Contact and skills are transcribed verbatim from public/resume.pdf.
  */
 
+// Relative, not "#/": scene.ts reaches this file (through contact.ts) and
+// the image scripts load scene.ts through tsx.
+import { SOCIALS } from "./socials";
+
 interface ContactLink {
 	/** As printed on the PDF, e.g. "github.com/AaronZacharyBernstein". */
 	label: string;
@@ -35,13 +39,14 @@ export const RESUME_CONTACT: ResumeContact = {
 	},
 	email: "aaronbernstein2005@gmail.com",
 	location: "Walnut Creek, CA",
+	// Labels are the PDF's own text; the URLs have one home, socials.ts.
 	linkedin: {
 		label: "linkedin.com/in/AaronZacharyBernstein",
-		url: "https://www.linkedin.com/in/AaronZacharyBernstein",
+		url: SOCIALS.linkedin.url,
 	},
 	github: {
 		label: "github.com/AaronZacharyBernstein",
-		url: "https://github.com/AaronZacharyBernstein",
+		url: SOCIALS.github.url,
 	},
 	website: "AaronBernstein.org",
 };

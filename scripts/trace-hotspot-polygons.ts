@@ -1,127 +1,39 @@
 /**
- * Build-time tool: derives hit polygons from hotspot PNG alpha channels.
- * Never imported by the app.
+ * Build-time tool: derives hit polygons from hotspot art. Never imported by
+ * the app.
  *
- *   npx tsx scripts/trace-hotspot-polygons.ts            # print polygons to paste into scene.ts
- *   npx tsx scripts/trace-hotspot-polygons.ts --analyze  # dims, alpha bboxes, row profiles
+ *   npm run trace-polygons               # print the polygons
+ *   npm run trace-polygons -- --write    # write them into src/config/scene.ts
+ *   npm run trace-polygons -- --analyze  # trimmed sizes, aspects, row profiles
  *
- * Pipeline per hotspot: decode PNG (8-bit non-interlaced RGBA only, via
- * node:zlib) -> threshold alpha at 32 -> largest connected component ->
- * Moore-neighbor boundary trace -> Ramer-Douglas-Peucker to 8..16 vertices
- * -> map pixel coords into scene-normalized 0..1 via the layer's box.
- * Polygons are a function of the box: re-run whenever a box changes.
+ * Pipeline per hotspot: trimmed source pixels (lib/source-art — the same
+ * pixels the optimizer encodes, so the two agree on the geometry) ->
+ * threshold alpha at 32 -> largest connected component -> Moore-neighbor
+ * boundary trace -> Ramer-Douglas-Peucker to 8..24 vertices -> each vertex
+ * as a fraction of the trimmed image.
+ *
+ * Polygons are a function of the art alone. They live in the item's own box
+ * space, so moving, resizing or rotating a layer needs no re-trace; run this
+ * again only when a hotspot's art changes.
  */
 
-import { Buffer } from "node:buffer";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { inflateSync } from "node:zlib";
 import process from "node:process";
-import { SCENE_LAYERS } from "../src/config/scene";
+import { SCENE_ASPECT_RATIO, SCENE_LAYERS } from "../src/config/scene";
+import {
+	readSceneSource,
+	setPolygon,
+	writeSceneSource,
+} from "./lib/scene-source";
+import { baseName, loadTrimmed } from "./lib/source-art";
 
 const ALPHA_THRESHOLD = 32;
 const MIN_VERTICES = 8;
-const MAX_VERTICES = 16;
-
-/**
- * The full-resolution PNG sources, not the generated WebP the app loads:
- * this decoder handles 8-bit non-interlaced RGBA only, and tracing the
- * downscaled art would quantize every vertex to the smaller pixel grid.
- */
-const imagesDir = fileURLToPath(new URL("../assets/images-src/", import.meta.url));
+const MAX_VERTICES = 24;
 
 interface DecodedAlpha {
 	width: number;
 	height: number;
 	alpha: Uint8Array;
-}
-
-function decodePngAlpha(buffer: Buffer): DecodedAlpha {
-	const signature = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
-	for (let i = 0; i < signature.length; i++) {
-		if (buffer[i] !== signature[i]) {
-			throw new Error("not a PNG");
-		}
-	}
-	let offset = 8;
-	let width = 0;
-	let height = 0;
-	let bitDepth = 0;
-	let colorType = 0;
-	let interlace = 0;
-	const idatParts: Buffer[] = [];
-	while (offset < buffer.length) {
-		const length = buffer.readUInt32BE(offset);
-		const type = buffer.toString("ascii", offset + 4, offset + 8);
-		const dataStart = offset + 8;
-		if (type === "IHDR") {
-			width = buffer.readUInt32BE(dataStart);
-			height = buffer.readUInt32BE(dataStart + 4);
-			bitDepth = buffer[dataStart + 8];
-			colorType = buffer[dataStart + 9];
-			interlace = buffer[dataStart + 12];
-		} else if (type === "IDAT") {
-			idatParts.push(buffer.subarray(dataStart, dataStart + length));
-		} else if (type === "IEND") {
-			break;
-		}
-		offset = dataStart + length + 4; // + CRC
-	}
-	if (bitDepth !== 8 || colorType !== 6 || interlace !== 0) {
-		throw new Error(
-			`unsupported PNG (bitDepth=${bitDepth} colorType=${colorType} interlace=${interlace}); only 8-bit non-interlaced RGBA is handled`,
-		);
-	}
-	const raw = inflateSync(Buffer.concat(idatParts));
-	const bytesPerPixel = 4;
-	const stride = width * bytesPerPixel;
-	const alpha = new Uint8Array(width * height);
-	const prior = new Uint8Array(stride);
-	const current = new Uint8Array(stride);
-	let pos = 0;
-	for (let y = 0; y < height; y++) {
-		const filter = raw[pos];
-		pos += 1;
-		for (let x = 0; x < stride; x++) {
-			const rawByte = raw[pos + x];
-			const left = x >= bytesPerPixel ? current[x - bytesPerPixel] : 0;
-			const up = prior[x];
-			const upLeft = x >= bytesPerPixel ? prior[x - bytesPerPixel] : 0;
-			let value: number;
-			switch (filter) {
-				case 0:
-					value = rawByte;
-					break;
-				case 1:
-					value = rawByte + left;
-					break;
-				case 2:
-					value = rawByte + up;
-					break;
-				case 3:
-					value = rawByte + ((left + up) >> 1);
-					break;
-				case 4: {
-					const p = left + up - upLeft;
-					const pa = Math.abs(p - left);
-					const pb = Math.abs(p - up);
-					const pc = Math.abs(p - upLeft);
-					value =
-						rawByte + (pa <= pb && pa <= pc ? left : pb <= pc ? up : upLeft);
-					break;
-				}
-				default:
-					throw new Error(`bad filter ${filter} in row ${y}`);
-			}
-			current[x] = value & 0xff;
-		}
-		pos += stride;
-		for (let x = 0; x < width; x++) {
-			alpha[y * width + x] = current[x * bytesPerPixel + 3];
-		}
-		prior.set(current);
-	}
-	return { width, height, alpha };
 }
 
 function buildMask(decoded: DecodedAlpha): Uint8Array {
@@ -408,15 +320,18 @@ function alphaBoundingBox(mask: Uint8Array, width: number, height: number): Alph
 }
 
 const analyze = process.argv.includes("--analyze");
+const write = process.argv.includes("--write");
+let source = write ? readSceneSource() : "";
 
 for (const layer of SCENE_LAYERS) {
-	const fileName = (layer.image.split("/").pop() ?? "").replace(
-		/\.[^.]+$/,
-		".png",
-	);
 	let decoded: DecodedAlpha;
 	try {
-		decoded = decodePngAlpha(readFileSync(imagesDir + fileName));
+		const art = await loadTrimmed(baseName(layer.image));
+		const alpha = new Uint8Array(art.width * art.height);
+		for (let i = 0; i < alpha.length; i++) {
+			alpha[i] = art.data[i * 4 + 3];
+		}
+		decoded = { width: art.width, height: art.height, alpha };
 	} catch (error) {
 		console.log(`${layer.id}: SKIP (${(error as Error).message})`);
 		continue;
@@ -426,14 +341,13 @@ for (const layer of SCENE_LAYERS) {
 	const box = alphaBoundingBox(component, decoded.width, decoded.height);
 
 	if (analyze) {
-		const fx0 = round4(box.x0 / decoded.width);
-		const fy0 = round4(box.y0 / decoded.height);
-		const fx1 = round4((box.x1 + 1) / decoded.width);
-		const fy1 = round4((box.y1 + 1) / decoded.height);
-		const contentAspect = (box.x1 + 1 - box.x0) / (box.y1 + 1 - box.y0);
+		const imageAspect = decoded.width / decoded.height;
+		const lockedHeight = round4(
+			(layer.box.width * SCENE_ASPECT_RATIO) / imageAspect,
+		);
 		console.log(
-			`${layer.id}: ${decoded.width}x${decoded.height} imageAspect=${round4(decoded.width / decoded.height)} ` +
-				`alphaBBoxFrac=[x ${fx0}..${fx1}, y ${fy0}..${fy1}] contentAspect=${round4(contentAspect)} pixels=${pixels}`,
+			`${layer.id}: trimmed ${decoded.width}x${decoded.height} aspect=${round4(imageAspect)} ` +
+				`box.width=${layer.box.width} -> locked height ${lockedHeight} (is ${layer.box.height}) pixels=${pixels}`,
 		);
 		// Row coverage profile inside the alpha bbox (fraction of bbox width).
 		const rows = 24;
@@ -459,17 +373,6 @@ for (const layer of SCENE_LAYERS) {
 		continue;
 	}
 
-	// The polygon mapping assumes the image fills its box (object-contain
-	// with a matching aspect). Warn loudly when that assumption is broken.
-	const boxDisplayAspect = (2 * layer.box.width) / layer.box.height;
-	const imageAspect = decoded.width / decoded.height;
-	const aspectError = Math.abs(boxDisplayAspect / imageAspect - 1);
-	if (aspectError > 0.01) {
-		console.log(
-			`// WARNING ${layer.id}: box display aspect ${round4(boxDisplayAspect)} != image aspect ${round4(imageAspect)} (${round4(aspectError * 100)}% off) — polygon will be misaligned`,
-		);
-	}
-
 	const contour = traceBoundary(component, decoded.width, decoded.height);
 	const { polygon, epsilon } = simplifyToBudget(contour);
 	const polygonArea = shoelaceArea(polygon);
@@ -477,10 +380,23 @@ for (const layer of SCENE_LAYERS) {
 		`// ${layer.id}: contour=${contour.length}pts -> ${polygon.length} vertices (eps=${round4(epsilon)}px), ` +
 			`polygonArea/maskArea=${round4(polygonArea / pixels)}`,
 	);
-	const lines = polygon.map(([px, py]) => {
-		const nx = round4(layer.box.x + ((px + 0.5) / decoded.width) * layer.box.width);
-		const ny = round4(layer.box.y + ((py + 0.5) / decoded.height) * layer.box.height);
-		return `\t\t\t[${nx}, ${ny}],`;
-	});
-	console.log(`\t\tpolygon: [\n${lines.join("\n")}\n\t\t],`);
+	// Pixel centres as fractions of the trimmed image: the item's box space.
+	const points = polygon.map(
+		([px, py]) =>
+			[
+				round4((px + 0.5) / decoded.width),
+				round4((py + 0.5) / decoded.height),
+			] as const,
+	);
+	if (write) {
+		source = setPolygon(source, layer.id, points);
+	} else {
+		const lines = points.map(([x, y]) => `\t\t\t[${x}, ${y}],`);
+		console.log(`\t\tpolygon: [\n${lines.join("\n")}\n\t\t],`);
+	}
+}
+
+if (write) {
+	writeSceneSource(source);
+	console.log("// polygons written to src/config/scene.ts");
 }

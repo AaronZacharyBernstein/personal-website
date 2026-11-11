@@ -1,4 +1,5 @@
 import type { SceneLayer } from "#/config/scene";
+import { SAY_HI_URL } from "#/content/contact";
 
 /** Round a normalized coordinate to 4 decimal places for stable output. */
 function round4(value: number): number {
@@ -11,6 +12,9 @@ function round4(value: number): number {
  * order, ready to paste over the existing export in src/config/scene.ts.
  * Layers are emitted in ARRAY order, never zIndex order, because array
  * order drives nav and tab order.
+ *
+ * Every field a layer can carry is written back out. A field added to the
+ * layer types and not handled here is silently lost on the next paste.
  */
 export function serializeSceneLayers(
 	layers: ReadonlyArray<SceneLayer>,
@@ -27,7 +31,16 @@ export function serializeSceneLayers(
 			];
 			if (layer.kind === "hotspot") {
 				lines.push(`\t\tlabel: ${s(layer.label)},`);
-				lines.push(`\t\troute: ${s(layer.route)},`);
+				if (layer.route !== undefined) {
+					lines.push(`\t\troute: ${s(layer.route)},`);
+				} else {
+					// The Gmail link is built from named constants in
+					// content/contact; keep the reference rather than
+					// freezing today's encoded URL into the config.
+					lines.push(
+						`\t\thref: ${layer.href === SAY_HI_URL ? "SAY_HI_URL" : s(layer.href)},`,
+					);
+				}
 			}
 			lines.push(`\t\timage: ${s(layer.image)},`);
 			lines.push(
@@ -35,6 +48,14 @@ export function serializeSceneLayers(
 			);
 			lines.push(`\t\tzIndex: ${layer.zIndex},`);
 			lines.push(`\t\tplaceholderColor: ${s(layer.placeholderColor)},`);
+			if (layer.rotation) {
+				lines.push(`\t\trotation: ${round4(layer.rotation)},`);
+			}
+			if (layer.tack) {
+				lines.push(
+					`\t\ttack: { color: ${s(layer.tack.color)}, variant: ${layer.tack.variant}, at: [${round4(layer.tack.at[0])}, ${round4(layer.tack.at[1])}] },`,
+				);
+			}
 			if (layer.kind === "hotspot") {
 				lines.push("\t\tpolygon: [");
 				for (const [x, y] of layer.polygon) {

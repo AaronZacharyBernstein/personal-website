@@ -17,7 +17,6 @@ import { Route as SceneLinksRouteImport } from './routes/_scene.links'
 import { Route as SceneProjectsRouteImport } from './routes/_scene.projects'
 import { Route as SceneResumeRouteImport } from './routes/_scene.resume'
 import { Route as SceneTimelineRouteImport } from './routes/_scene.timeline'
-import { Route as ApiTrpcSplatRouteImport } from './routes/api.trpc.$'
 
 const SceneRoute = SceneRouteImport.update({
   id: '/_scene',
@@ -58,11 +57,6 @@ const SceneTimelineRoute = SceneTimelineRouteImport.update({
   path: '/timeline',
   getParentRoute: () => SceneRoute,
 } as any)
-const ApiTrpcSplatRoute = ApiTrpcSplatRouteImport.update({
-  id: '/api/trpc/$',
-  path: '/api/trpc/$',
-  getParentRoute: () => rootRouteImport,
-} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof SceneIndexRoute
@@ -72,7 +66,6 @@ export interface FileRoutesByFullPath {
   '/projects': typeof SceneProjectsRoute
   '/resume': typeof SceneResumeRoute
   '/timeline': typeof SceneTimelineRoute
-  '/api/trpc/$': typeof ApiTrpcSplatRoute
 }
 export interface FileRoutesByTo {
   '/education': typeof SceneEducationRoute
@@ -82,7 +75,6 @@ export interface FileRoutesByTo {
   '/resume': typeof SceneResumeRoute
   '/timeline': typeof SceneTimelineRoute
   '/': typeof SceneIndexRoute
-  '/api/trpc/$': typeof ApiTrpcSplatRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -94,7 +86,6 @@ export interface FileRoutesById {
   '/_scene/resume': typeof SceneResumeRoute
   '/_scene/timeline': typeof SceneTimelineRoute
   '/_scene/': typeof SceneIndexRoute
-  '/api/trpc/$': typeof ApiTrpcSplatRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -106,7 +97,6 @@ export interface FileRouteTypes {
     | '/projects'
     | '/resume'
     | '/timeline'
-    | '/api/trpc/$'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/education'
@@ -116,7 +106,6 @@ export interface FileRouteTypes {
     | '/resume'
     | '/timeline'
     | '/'
-    | '/api/trpc/$'
   id:
     | '__root__'
     | '/_scene'
@@ -127,12 +116,10 @@ export interface FileRouteTypes {
     | '/_scene/resume'
     | '/_scene/timeline'
     | '/_scene/'
-    | '/api/trpc/$'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   SceneRoute: typeof SceneRouteWithChildren
-  ApiTrpcSplatRoute: typeof ApiTrpcSplatRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -193,13 +180,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SceneTimelineRouteImport
       parentRoute: typeof SceneRoute
     }
-    '/api/trpc/$': {
-      id: '/api/trpc/$'
-      path: '/api/trpc/$'
-      fullPath: '/api/trpc/$'
-      preLoaderRoute: typeof ApiTrpcSplatRouteImport
-      parentRoute: typeof rootRouteImport
-    }
   }
 }
 
@@ -227,7 +207,6 @@ const SceneRouteWithChildren = SceneRoute._addFileChildren(SceneRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   SceneRoute: SceneRouteWithChildren,
-  ApiTrpcSplatRoute: ApiTrpcSplatRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

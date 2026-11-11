@@ -12,6 +12,7 @@ import {
 	useRef,
 	useState,
 } from "react";
+import { SCENE_FRAME_STYLE } from "#/components/scene/frame";
 import { Scene } from "#/components/scene/scene";
 import { SceneMobile } from "#/components/scene/scene-mobile";
 import {
@@ -21,12 +22,8 @@ import {
 } from "#/components/scene/section-nav";
 import { NavOpenContext } from "#/components/section-panel";
 import type { HotspotId } from "#/config/scene";
-import {
-	DESKTOP_MEDIA_QUERY,
-	SCENE_ASPECT_RATIO,
-	SCENE_HOTSPOTS,
-	SCENE_MAX_WIDTH,
-} from "#/config/scene";
+import { DESKTOP_MEDIA_QUERY, SCENE_SECTION_HOTSPOTS } from "#/config/scene";
+import { SITE_NAME } from "#/content/site";
 import { useMediaQuery } from "#/hooks/use-media-query";
 import { cn } from "#/lib/utils.ts";
 
@@ -74,17 +71,18 @@ function SceneLayout() {
 	const [navOpen, setNavOpen] = useState(false);
 	const navButtonRef = useRef<HTMLButtonElement | null>(null);
 	const { debug, calibrate } = Route.useSearch();
-	// A section panel is open iff a hotspot route is matched. Route-derived,
-	// so it is known on the server and a cold /resume load renders the scene
-	// inert (and hidden below md) with no hydration disagreement. Derived
-	// from the MATCHES, not the pathname string: the router matches routes
+	// A section panel is open iff a section hotspot's route is matched (the
+	// envelope is an external link and has no route). Route-derived, so it is
+	// known on the server and a cold /resume load renders the scene inert
+	// (and hidden below md) with no hydration disagreement. Derived from the
+	// MATCHES, not the pathname string: the router matches routes
 	// case-insensitively, so a cold /Resume load renders the panel — and a
 	// pathname comparison would miss it, leaving the scene live behind the
 	// dialog.
 	const sectionOpen = useRouterState({
 		select: (s) =>
 			s.matches.some((match) =>
-				SCENE_HOTSPOTS.some(
+				SCENE_SECTION_HOTSPOTS.some(
 					(hotspot) => match.routeId === `/_scene${hotspot.route}`,
 				),
 			),
@@ -137,6 +135,11 @@ function SceneLayout() {
 
 	return (
 		<div className="mx-auto w-full px-4 py-6">
+			{/* The name on the board is lettering in an image, so the page's
+			    real heading is this one: in the server-rendered HTML for
+			    search engines and screen readers, visually hidden. Only on
+			    the board itself — an open section's panel carries its own h1. */}
+			{sectionOpen ? null : <h1 className="sr-only">{SITE_NAME}</h1>}
 			{/* Desktop-only nav toggle. Mobile keeps the always-visible list,
 			    so below md there is no button and no collapsed state. */}
 			<button
@@ -182,23 +185,19 @@ function SceneLayout() {
 						fallback={
 							// Same-size box so the layout never collapses while the
 							// lazy calibration chunk loads.
-							<div
-								className="w-full"
-								style={{
-									maxWidth: SCENE_MAX_WIDTH,
-									aspectRatio: `${SCENE_ASPECT_RATIO} / 1`,
-								}}
-							/>
+							<div data-scene-frame="" style={SCENE_FRAME_STYLE} />
 						}
 					>
 						<CalibrationTool debug={debug === true} />
 					</Suspense>
 				) : (
 					// isolate: the scene's internal z-indexes must never paint
-					// above the fixed z-50 nav chrome.
+					// above the fixed z-50 nav chrome. Sized by the
+					// [data-scene-frame] rules in styles.css.
 					<div
+						data-scene-frame=""
 						className={cn(
-							"relative isolate w-full overflow-hidden",
+							"relative isolate overflow-hidden",
 							// Below md the scene is purely decorative, so an open
 							// section hides it outright: a phone gets the content
 							// and nothing else, and a display:none subtree never
@@ -210,10 +209,7 @@ function SceneLayout() {
 						// keyboard/AT; unlike the nav's, this one can be
 						// server-rendered because sectionOpen is route state.
 						inert={sectionOpen}
-						style={{
-							maxWidth: SCENE_MAX_WIDTH,
-							aspectRatio: `${SCENE_ASPECT_RATIO} / 1`,
-						}}
+						style={SCENE_FRAME_STYLE}
 					>
 						{/* Both variants render on the server and stay mounted at
 						    every width; each hides itself with a CSS breakpoint,
@@ -236,11 +232,12 @@ function SceneLayout() {
 					onHoverChange={setHoveredId}
 					open={navOpen}
 					// A section link's panel takes focus itself; refocusing the
-					// toggle would steal it back out of the dialog. Home mounts
-					// no panel, so there the toggle must still catch focus.
+					// toggle would steal it back out of the dialog. Home and the
+					// external "Say hi" link (route null) mount no panel, so
+					// there the toggle must still catch focus.
 					onLinkClick={(route) =>
 						closeNav({
-							refocus: !SCENE_HOTSPOTS.some(
+							refocus: !SCENE_SECTION_HOTSPOTS.some(
 								(hotspot) => hotspot.route === route,
 							),
 						})

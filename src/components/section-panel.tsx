@@ -29,6 +29,13 @@ export const NavOpenContext = createContext(false);
 export interface SectionPanelProps {
 	title: string;
 	children: ReactNode;
+	/**
+	 * Desktop max width of the panel box, as a CSS length. Defaults to
+	 * PANEL_MAX_WIDTH; a section with very little content passes a narrower
+	 * one so it is not a wide, mostly empty dialog. Nothing else about the
+	 * panel changes with it.
+	 */
+	maxWidth?: string;
 }
 
 /**
@@ -43,7 +50,11 @@ export interface SectionPanelProps {
  * the scene layout would lose the nav-first Escape ordering (and nothing
  * else).
  */
-export function SectionPanel({ title, children }: SectionPanelProps) {
+export function SectionPanel({
+	title,
+	children,
+	maxWidth = PANEL_MAX_WIDTH,
+}: SectionPanelProps) {
 	const navigate = useNavigate();
 	const navOpen = useContext(NavOpenContext);
 	const router = useRouter();
@@ -155,7 +166,7 @@ export function SectionPanel({ title, children }: SectionPanelProps) {
 				tabIndex={-1}
 				style={
 					{
-						"--panel-max-width": PANEL_MAX_WIDTH,
+						"--panel-max-width": maxWidth,
 						"--panel-max-height": PANEL_MAX_HEIGHT,
 					} as CSSProperties
 				}

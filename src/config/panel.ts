@@ -8,5 +8,8 @@
 /** Max width of the desktop panel box. */
 export const PANEL_MAX_WIDTH = "56rem";
 
+/** For a section with only a few lines to show, such as /links. */
+export const PANEL_NARROW_MAX_WIDTH = "26rem";
+
 /** Max height of the desktop panel box; the body scrolls internally past it. */
 export const PANEL_MAX_HEIGHT = "85vh";

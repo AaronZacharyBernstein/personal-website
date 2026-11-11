@@ -145,7 +145,7 @@ body,
  * is visible and — because a url() sitting in an unsubstituted custom
  * property is an inert token, not a resource — which one is ever fetched.
  * A viewport below md never resolves --layer-image, so it never downloads
- * the eight layers; a viewport at or above md never resolves
+ * the layers or their tacks; a viewport at or above md never resolves
  * --scene-mobile-image.
  *
  * Deliberately no background-color on either: a fill under a background
@@ -174,5 +174,98 @@ body,
     background-size: cover;
     background-position: center;
     background-repeat: no-repeat;
+  }
+}
+
+/*
+ * The scene box. Its three custom properties come from src/config/scene by
+ * inline style. At md and up it also shrinks to whatever the viewport's
+ * height allows, so the whole board is visible without scrolling; below md
+ * the flat image simply takes the column's width.
+ */
+[data-scene-frame] {
+  width: 100%;
+  max-width: var(--scene-max-width);
+  aspect-ratio: var(--scene-aspect);
+}
+
+@media (min-width: 768px) {
+  [data-scene-frame] {
+    width: min(
+      100%,
+      calc((100dvh - var(--scene-fit-margin)) * var(--scene-aspect))
+    );
+  }
+}
+
+/*
+ * Pinned items. The shadow sits on a wrapper that is never rotated, so it
+ * falls down and to the right for every item whatever angle the item hangs
+ * at; the art inside turns by its configured rotation plus the hover swing.
+ * Hover only ever sets the two `-now` properties (behind `motion-safe:` in
+ * scene.tsx), so these rules can stay unlayered without a utility having to
+ * outrank them.
+ */
+[data-scene-shadow] {
+  filter: var(--scene-shadow-now, var(--scene-shadow));
+}
+
+[data-scene-art] {
+  transform: rotate(
+    calc(var(--scene-rotation, 0deg) + var(--scene-swing-now, 0deg))
+  );
+}
+
+/*
+ * The intro's CSS half. The head script puts `intro` and `intro-pending` on
+ * <html> before first paint when the intro is going to play (see
+ * components/scene/intro-boot.ts); nothing here applies otherwise, and
+ * never below md or with reduced motion.
+ *
+ * `intro` fades the board in, from the very first frame and without any
+ * JavaScript. `intro-pending` holds the items and tacks at opacity 0 — the
+ * finished board the server rendered must not flash before the drops — and
+ * is removed the instant the GSAP timeline takes over.
+ *
+ * The hold is itself an animation, which is the failsafe: after the delay
+ * it ends at opacity 1, so if the script never arrives the board reveals
+ * itself. An animation rather than a plain rule plus a timer, because it
+ * needs no JavaScript to undo.
+ *
+ * Transitions are off for the duration: an item's own hover transition
+ * would otherwise ease every frame GSAP writes, smearing the landing.
+ */
+@media (min-width: 768px) and (prefers-reduced-motion: no-preference) {
+  html.intro [data-intro="board"] {
+    animation: intro-board var(--intro-board-fade, 300ms) ease-out both;
+  }
+
+  html.intro-pending [data-intro="item"],
+  html.intro-pending [data-intro="tack"] {
+    animation: intro-failsafe 1ms linear var(--intro-failsafe, 2500ms) both;
+  }
+
+  html.intro [data-intro],
+  html.intro [data-scene-art] {
+    transition: none;
+  }
+
+  html.intro [data-scene-label] {
+    display: none;
+  }
+}
+
+@keyframes intro-board {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes intro-failsafe {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
   }
 }

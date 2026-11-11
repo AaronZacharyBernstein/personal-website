@@ -23,11 +23,12 @@ export interface SectionNavProps {
 	 */
 	open: boolean;
 	/**
-	 * Called with the chosen link's route, so the layout can close the
-	 * panel — and decide whether closing should park focus on the toggle
-	 * (Home) or leave it for the destination's section panel to take.
+	 * Called with the chosen link's route — null for an external link, which
+	 * has none — so the layout can close the panel and decide whether
+	 * closing should park focus on the toggle (Home, external) or leave it
+	 * for the destination's section panel to take.
 	 */
-	onLinkClick: (route: string) => void;
+	onLinkClick: (route: string | null) => void;
 	/**
 	 * True only when the desktop panel is closed: takes the links out of
 	 * the tab order immediately, without waiting for the visibility
@@ -151,27 +152,49 @@ export function SectionNav({
 						{SCENE_HOME.label}
 					</Link>
 				</li>
-				{SCENE_HOTSPOTS.map((hotspot) => (
-					<li key={hotspot.id}>
-						<Link
-							to={hotspot.route}
-							activeOptions={{ includeSearch: false }}
-							onClick={() => onLinkClick(hotspot.route)}
-							onMouseEnter={() => onHoverChange(hotspot.id)}
-							onMouseLeave={() => onHoverChange(null)}
-							onFocus={() => onHoverChange(hotspot.id)}
-							onBlur={() => onHoverChange(null)}
-							className={cn(
-								linkClass,
-								// text-foreground too: muted-foreground only clears
-								// WCAG AA on the plain background, not on accent/50.
-								hoveredId === hotspot.id && "bg-accent/50 text-foreground",
+				{SCENE_HOTSPOTS.map((hotspot) => {
+					const hover = {
+						onMouseEnter: () => onHoverChange(hotspot.id),
+						onMouseLeave: () => onHoverChange(null),
+						onFocus: () => onHoverChange(hotspot.id),
+						onBlur: () => onHoverChange(null),
+						className: cn(
+							linkClass,
+							// text-foreground too: muted-foreground only clears
+							// WCAG AA on the plain background, not on accent/50.
+							hoveredId === hotspot.id && "bg-accent/50 text-foreground",
+						),
+					};
+					return (
+						<li key={hotspot.id}>
+							{hotspot.route !== undefined ? (
+								<Link
+									to={hotspot.route}
+									activeOptions={{ includeSearch: false }}
+									onClick={() => onLinkClick(hotspot.route)}
+									{...hover}
+								>
+									{hotspot.label}
+								</Link>
+							) : (
+								// An external hotspot is a plain anchor: same row, same
+								// hover sync with the board, but it leaves the site in
+								// a new tab instead of opening a panel. Still an
+								// a[href], so the arrow-key roving above includes it.
+								<a
+									href={hotspot.href}
+									target="_blank"
+									rel="noopener noreferrer"
+									onClick={() => onLinkClick(null)}
+									{...hover}
+								>
+									{hotspot.label}
+									<span className="sr-only"> (opens in a new tab)</span>
+								</a>
 							)}
-						>
-							{hotspot.label}
-						</Link>
-					</li>
-				))}
+						</li>
+					);
+				})}
 			</ul>
 		</nav>
 	);

@@ -5,12 +5,16 @@ import {
 	useState,
 } from "react";
 import type { SceneLayer } from "#/config/scene";
+import { SCENE_LAYERS, SCENE_MAX_WIDTH } from "#/config/scene";
 import {
-	SCENE_ASPECT_RATIO,
-	SCENE_LAYERS,
-	SCENE_MAX_WIDTH,
-} from "#/config/scene";
+	layerPivot,
+	layerPolygonInScene,
+	projectFromScene,
+	projectToScene,
+	tackLayers,
+} from "#/config/scene-geometry";
 import { cn } from "#/lib/utils.ts";
+import { SCENE_FRAME_STYLE } from "../frame";
 import { toViewBoxPoints, VIEWBOX_HEIGHT, VIEWBOX_WIDTH } from "../geometry";
 import { serializeSceneLayers } from "./serialize";
 
@@ -71,9 +75,14 @@ function cloneLayers(layers: ReadonlyArray<SceneLayer>): SceneLayer[] {
 			? {
 					...layer,
 					box: { ...layer.box },
+					tack: { ...layer.tack, at: [...layer.tack.at] },
 					polygon: layer.polygon.map(([x, y]) => [x, y] as [number, number]),
 				}
-			: { ...layer, box: { ...layer.box } },
+			: {
+					...layer,
+					box: { ...layer.box },
+					tack: layer.tack && { ...layer.tack, at: [...layer.tack.at] },
+				},
 	);
 }
 
@@ -134,6 +143,9 @@ export default function CalibrationTool({ debug }: { debug: boolean }) {
 	const dragRef = useRef<DragState | null>(null);
 
 	const selected = layers.find((layer) => layer.id === selectedId) ?? null;
+	// The selected hotspot's polygon where it is drawn: in scene space.
+	const selectedPolygon =
+		selected?.kind === "hotspot" ? layerPolygonInScene(selected) : [];
 	const chromeZ = Math.max(...layers.map((layer) => layer.zIndex)) + 30;
 	const stacked = [...layers].sort((a, b) => b.zIndex - a.zIndex);
 	const code = serializeSceneLayers(layers);
@@ -144,10 +156,19 @@ export default function CalibrationTool({ debug }: { debug: boolean }) {
 		);
 	};
 
+	const updateRotation = (id: string, rotation: number) => {
+		setLayers((prev) =>
+			prev.map((layer) => (layer.id === id ? { ...layer, rotation } : layer)),
+		);
+	};
+
+	// Polygons are stored in the layer's own box space but edited where they
+	// are seen, in scene space: a vertex arrives here as a scene point and is
+	// projected back through the layer's box and rotation.
 	const updateVertex = (
 		id: string,
 		index: number,
-		vertex: [number, number],
+		scenePoint: [number, number],
 	) => {
 		setLayers((prev) =>
 			prev.map((layer) =>
@@ -155,7 +176,7 @@ export default function CalibrationTool({ debug }: { debug: boolean }) {
 					? {
 							...layer,
 							polygon: layer.polygon.map((point, i) =>
-								i === index ? vertex : point,
+								i === index ? projectFromScene(layer, scenePoint) : point,
 							),
 						}
 					: layer,
@@ -201,14 +222,17 @@ export default function CalibrationTool({ debug }: { debug: boolean }) {
 						) {
 							return {
 								...layer,
-								polygon: layer.polygon.map((point, i) =>
-									i === selectedVertex
-										? ([point[0] + dx * step, point[1] + dy * step] as [
-												number,
-												number,
-											])
-										: point,
-								),
+								polygon: layer.polygon.map((point, i) => {
+									if (i !== selectedVertex) {
+										return point;
+									}
+									// Nudge in scene space, as the arrow reads on screen.
+									const [x, y] = projectToScene(layer, point);
+									return projectFromScene(layer, [
+										x + dx * step,
+										y + dy * step,
+									]);
+								}),
 							};
 						}
 						return {
@@ -416,11 +440,9 @@ export default function CalibrationTool({ debug }: { debug: boolean }) {
 			<div
 				ref={canvasRef}
 				aria-hidden="true"
-				className="relative isolate w-full touch-none select-none rounded-lg border border-neutral-400 bg-neutral-200"
-				style={{
-					maxWidth: SCENE_MAX_WIDTH,
-					aspectRatio: `${SCENE_ASPECT_RATIO} / 1`,
-				}}
+				data-scene-frame=""
+				className="relative isolate touch-none select-none rounded-lg border border-neutral-400 bg-neutral-200"
+				style={SCENE_FRAME_STYLE}
 				onPointerDown={(event) => {
 					if (event.target === event.currentTarget) {
 						setSelectedId(null);
@@ -450,13 +472,17 @@ export default function CalibrationTool({ debug }: { debug: boolean }) {
 						onPointerUp={endDrag}
 						onLostPointerCapture={endDrag}
 					>
+						{/* The outline is the unrotated box; the art turns inside it
+						    about the same pivot the scene uses. */}
 						<img
 							src={layer.image}
 							alt=""
 							draggable={false}
-							className="pointer-events-none h-full w-full object-contain"
+							className="pointer-events-none h-full w-full"
 							style={{
 								opacity: hideArt ? 0 : (opacities[layer.id] ?? 100) / 100,
+								transform: `rotate(${layer.rotation ?? 0}deg)`,
+								transformOrigin: `${layerPivot(layer)[0] * 100}% ${layerPivot(layer)[1] * 100}%`,
 							}}
 						/>
 						<span
@@ -467,6 +493,28 @@ export default function CalibrationTool({ debug }: { debug: boolean }) {
 						</span>
 					</div>
 				))}
+
+				{/* Tacks are derived from their items, so they follow every move
+				    here exactly as they do in the scene. Not draggable: a tack's
+				    place on its item is `tack.at` in scene.ts. */}
+				{hideArt
+					? null
+					: tackLayers(layers).map((tack) => (
+							<img
+								key={tack.id}
+								src={tack.image}
+								alt=""
+								draggable={false}
+								className="pointer-events-none absolute"
+								style={{
+									left: `${tack.box.x * 100}%`,
+									top: `${tack.box.y * 100}%`,
+									width: `${tack.box.width * 100}%`,
+									height: `${tack.box.height * 100}%`,
+									zIndex: tack.zIndex,
+								}}
+							/>
+						))}
 
 				{/* Selection chrome: polygons + handles, always above every layer */}
 				<svg
@@ -481,7 +529,7 @@ export default function CalibrationTool({ debug }: { debug: boolean }) {
 								layer.kind === "hotspot" ? (
 									<polygon
 										key={layer.id}
-										points={toViewBoxPoints(layer.polygon)}
+										points={toViewBoxPoints(layerPolygonInScene(layer))}
 										fill={layer.placeholderColor}
 										fillOpacity={0.08}
 										stroke={layer.placeholderColor}
@@ -494,15 +542,15 @@ export default function CalibrationTool({ debug }: { debug: boolean }) {
 					{selected?.kind === "hotspot" ? (
 						<>
 							<polygon
-								points={toViewBoxPoints(selected.polygon)}
+								points={toViewBoxPoints(selectedPolygon)}
 								fill={selected.placeholderColor}
 								fillOpacity={0.15}
 								stroke={selected.placeholderColor}
 								strokeWidth={2}
 							/>
-							{selected.polygon.map(([x, y], index) => {
+							{selectedPolygon.map(([x, y], index) => {
 								const next =
-									selected.polygon[(index + 1) % selected.polygon.length];
+									selectedPolygon[(index + 1) % selectedPolygon.length];
 								const midX = ((x + next[0]) / 2) * VIEWBOX_WIDTH;
 								const midY = ((y + next[1]) / 2) * VIEWBOX_HEIGHT;
 								return (
@@ -524,7 +572,7 @@ export default function CalibrationTool({ debug }: { debug: boolean }) {
 									/>
 								);
 							})}
-							{selected.polygon.map(([x, y], index) => (
+							{selectedPolygon.map(([x, y], index) => (
 								<circle
 									key={`vertex-${selected.id}-${index}`}
 									cx={x * VIEWBOX_WIDTH}
@@ -595,6 +643,21 @@ export default function CalibrationTool({ debug }: { debug: boolean }) {
 						<span className="text-neutral-600">
 							Clipboard blocked — copy from the block below.
 						</span>
+					) : null}
+					{selected ? (
+						<label className="flex items-center gap-2">
+							rotation of {selected.id}
+							<input
+								type="number"
+								step={0.5}
+								value={selected.rotation ?? 0}
+								onChange={(event) =>
+									updateRotation(selected.id, Number(event.target.value) || 0)
+								}
+								className="w-20 rounded border border-neutral-400 bg-white px-1.5 py-0.5"
+							/>
+							°
+						</label>
 					) : null}
 					<label className="ml-auto flex items-center gap-2">
 						<input
@@ -672,8 +735,11 @@ export default function CalibrationTool({ debug }: { debug: boolean }) {
 				<p className="mt-3 text-neutral-500">
 					Drag to move, corner handles to resize. Arrow keys nudge the selected
 					layer (or vertex) by 0.001, Shift+Arrow by 0.01. Click a segment
-					midpoint to add a vertex; Delete removes the selected vertex. Paste
-					the output over SCENE_LAYERS in src/config/scene.ts.
+					midpoint to add a vertex; Delete removes the selected vertex. A
+					polygon and a tack follow their layer when it moves, resizes or
+					rotates. After resizing, run `npm run optimize-images -- --lock` to
+					re-lock box heights to the art. Paste the output over SCENE_LAYERS in
+					src/config/scene.ts.
 				</p>
 
 				<pre className="mt-3 max-h-64 overflow-auto rounded-md border border-neutral-300 bg-neutral-100 p-3 font-mono text-xs select-text">
