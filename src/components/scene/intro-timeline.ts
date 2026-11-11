@@ -26,8 +26,9 @@ function shadowValue(shadow: SceneShadow): string {
 }
 
 /** Seconds since the board's CSS fade began, i.e. since first paint. */
-function boardFadeElapsed(root: HTMLElement): number {
-	const board = root.querySelector('[data-intro="board"]');
+function boardFadeElapsed(): number {
+	// The board (frame and cork) is drawn by the layout, outside the stage.
+	const board = document.querySelector('[data-intro="board"]');
 	const fade = board
 		?.getAnimations()
 		.find(
@@ -50,7 +51,7 @@ function build(timeline: gsap.core.Timeline, root: HTMLElement): void {
 	// fade. Shift it so the first drop lands on its mark if there is still
 	// time, or starts now if that moment has already passed.
 	const shift =
-		Math.max(0, INTRO.firstDropAt - boardFadeElapsed(root)) - INTRO.firstDropAt;
+		Math.max(0, INTRO.firstDropAt - boardFadeElapsed()) - INTRO.firstDropAt;
 	const find = (role: string, id: string) =>
 		root.querySelector<HTMLElement>(
 			`[data-intro="${role}"][data-intro-id="${id}"]`,

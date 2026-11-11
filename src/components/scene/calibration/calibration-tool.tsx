@@ -14,7 +14,6 @@ import {
 	tackLayers,
 } from "#/config/scene-geometry";
 import { cn } from "#/lib/utils.ts";
-import { SCENE_FRAME_STYLE } from "../frame";
 import { toViewBoxPoints, VIEWBOX_HEIGHT, VIEWBOX_WIDTH } from "../geometry";
 import { serializeSceneLayers } from "./serialize";
 
@@ -440,9 +439,8 @@ export default function CalibrationTool({ debug }: { debug: boolean }) {
 			<div
 				ref={canvasRef}
 				aria-hidden="true"
-				data-scene-frame=""
+				data-scene-canvas=""
 				className="relative isolate touch-none select-none rounded-lg border border-neutral-400 bg-neutral-200"
-				style={SCENE_FRAME_STYLE}
 				onPointerDown={(event) => {
 					if (event.target === event.currentTarget) {
 						setSelectedId(null);

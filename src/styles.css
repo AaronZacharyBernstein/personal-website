@@ -178,22 +178,165 @@ body,
 }
 
 /*
- * The scene box. Its three custom properties come from src/config/scene by
- * inline style. At md and up it also shrinks to whatever the viewport's
- * height allows, so the whole board is visible without scrolling; below md
- * the flat image simply takes the column's width.
+ * The scene box and, at md and up, the board that fills the viewport.
+ * Every custom property used here is set on the scene layout's root by
+ * components/scene/frame.ts from src/config/board.ts, where the same
+ * arithmetic is repeated in JavaScript for `npm run check-scene`. Change
+ * one, change the other.
+ *
+ * Below md nothing in this block applies beyond the first rule: the scene
+ * is one flat image in a box with the board's own aspect ratio.
  */
-[data-scene-frame] {
+[data-scene-frame],
+[data-scene-canvas] {
   width: 100%;
   max-width: var(--scene-max-width);
   aspect-ratio: var(--scene-aspect);
 }
 
+/* The calibration tool's canvas: the composition's own scene box, fitted
+   to the viewport's height as the whole board used to be. */
 @media (min-width: 768px) {
-  [data-scene-frame] {
+  [data-scene-canvas] {
     width: min(
       100%,
       calc((100dvh - var(--scene-fit-margin)) * var(--scene-aspect))
+    );
+  }
+}
+
+@media (min-width: 768px) {
+  /* The board is the viewport: no page scroll, nothing beside it. */
+  [data-scene-frame] {
+    width: 100%;
+    max-width: none;
+    height: 100dvh;
+    aspect-ratio: auto;
+  }
+
+  /*
+   * Frame and cork, on one element behind everything else.
+   *
+   * The frame is a 9-slice of the board art. The four corner blocks are
+   * drawn as they are, mitred joins included; each edge strip stretches
+   * along its own length only. Its thickness never stretches, because the
+   * border widths and the slice offsets are the same four numbers times one
+   * unit. That unit is a fraction of the viewport's height or of its
+   * width, whichever gives less (board.ts): height on a window at least as
+   * wide as 16:10, so the wood is as thick on an ultrawide as on a laptop
+   * of the same height; width on a narrower one, so a portrait window
+   * keeps more of itself for cork.
+   *
+   * The cork is a tile cut from the same art and mirrored so it has no
+   * seam, at the same scale as the frame so the grain matches. It stops at
+   * the frame's inner edge (padding-box): the art's outer outline is
+   * hand-drawn, and cork must not show through the slivers outside it.
+   *
+   * No background-color, as with every layer: a fill under images that
+   * have not decoded yet is the load flash.
+   */
+  [data-scene-board] {
+    position: absolute;
+    inset: 0;
+    box-sizing: border-box;
+    border-style: solid;
+    border-color: transparent;
+    border-width: var(--frame-top) var(--frame-right) var(--frame-bottom)
+      var(--frame-left);
+    border-image-source: var(--frame-image);
+    border-image-slice: var(--frame-slice);
+    border-image-repeat: stretch;
+    background-image: var(--cork-image);
+    background-size: var(--cork-tile);
+    background-repeat: repeat;
+    background-origin: padding-box;
+    background-clip: padding-box;
+  }
+
+  /*
+   * The visible cork: everything inside the frame. A size container, so
+   * the stage and the anchored pins can measure it (cqw/cqh below).
+   */
+  [data-scene-cork] {
+    position: absolute;
+    top: var(--frame-top);
+    right: var(--frame-right);
+    bottom: var(--frame-bottom);
+    left: var(--frame-left);
+    /* Sized by its four offsets, not by the h-full/w-full it wears below md. */
+    width: auto;
+    height: auto;
+    container-type: size;
+  }
+
+  [data-scene-cork][data-debug] {
+    outline: 2px dashed rgb(15 23 42 / 0.6);
+    outline-offset: -2px;
+  }
+
+  /*
+   * The shadow the art has along the top and left of the cork, just inside
+   * the frame, which is what makes the cork read as recessed. A translucent
+   * overlay cut from the art, laid over the tiled cork as a 9-slice of its
+   * own: the corner block holds the rounded inside corner as drawn, and the
+   * top and left strips stretch along the edges. It has no right or bottom.
+   */
+  [data-scene-board-shadow] {
+    position: absolute;
+    inset: 0;
+    box-sizing: border-box;
+    border-style: solid;
+    border-color: transparent;
+    border-width: var(--shadow-top) 0 0 var(--shadow-left);
+    border-image-source: var(--shadow-image);
+    border-image-slice: var(--shadow-slice);
+    border-image-repeat: stretch;
+    pointer-events: none;
+  }
+
+  /*
+   * The stage: the composition's own scene box. Its width is the
+   * fit-to-height rule — never wider than the max, never taller than the
+   * viewport allows — plus the two limits that keep its own cork inside
+   * the real one, which are what bind on a narrow or portrait viewport.
+   * It is centred by its cork, not its box, so the composition sits where
+   * it was drawn relative to the frame. Extra width is simply empty cork.
+   *
+   * --stage-w is declared here, on the stage, because the shadows and the
+   * pin offsets are written in terms of it and a custom property resolves
+   * where it is declared. The stage is deliberately NOT a container: the
+   * cqw and cqh inside it must keep meaning the cork.
+   */
+  [data-scene-stage] {
+    --stage-w: min(
+      var(--scene-max-width),
+      calc((100dvh - var(--scene-fit-margin)) * var(--scene-aspect)),
+      calc(100cqw / var(--stage-cork-width)),
+      calc(100cqh / var(--stage-cork-height) * var(--scene-aspect))
+    );
+    --stage-h: calc(var(--stage-w) / var(--scene-aspect));
+    position: absolute;
+    width: var(--stage-w);
+    height: var(--stage-h);
+    left: calc(50% - var(--stage-w) * var(--stage-cork-center-x));
+    top: calc(50% - var(--stage-h) * var(--stage-cork-center-y));
+  }
+
+  /*
+   * Team pins. Drawn in the composition's top-right corner, then carried
+   * to the real cork's top-right corner: right by the gap between the two
+   * corks' right edges, up by the gap between their top edges. Their
+   * distance from the frame is therefore exactly what it was drawn as.
+   *
+   * Both gaps are zero or more, so the pins only ever move away from the
+   * composition, never into it; and where the composition's cork already
+   * fills the real one on an axis — a narrow window — that gap is zero and
+   * the pins are back where they were drawn.
+   */
+  [data-scene-anchor="cork-top-right"] {
+    transform: translate(
+      max(0px, calc(50cqw - var(--stage-w) * var(--stage-cork-width) / 2)),
+      min(0px, calc(var(--stage-h) * var(--stage-cork-height) / 2 - 50cqh))
     );
   }
 }

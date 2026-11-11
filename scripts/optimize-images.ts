@@ -22,28 +22,35 @@
  * Every source is trimmed to its visible content first (lib/source-art),
  * so a layer's box describes the object, not the padding it was exported
  * with. Each layer's target width then comes from the composition rather
- * than a global constant: box.width * SCENE_MAX_WIDTH is the widest that
+ * than a global constant: box.width * SCENE_REFERENCE_WIDTH is how wide that
  * layer is ever rendered, and DEVICE_PIXEL_RATIO doubles it for retina. A
  * source is never upscaled past its trimmed width, so the target is a
  * ceiling, not a demand.
  */
 
-import { readdirSync, statSync, unlinkSync } from "node:fs";
+import {
+	readdirSync,
+	readFileSync,
+	statSync,
+	unlinkSync,
+	writeFileSync,
+} from "node:fs";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import type { SceneLayer } from "../src/config/scene";
 import {
 	SCENE_ASPECT_RATIO,
+	SCENE_BOARD_ART,
 	SCENE_BOARD_ID,
 	SCENE_BOARD_PIXELS,
 	SCENE_LAYERS,
-	SCENE_MAX_WIDTH,
 	SCENE_MOBILE_IMAGE,
 	SCENE_REFERENCE_WIDTH,
 	SCENE_SHADOWS,
 	SCENE_TACK_ASPECT,
 } from "../src/config/scene";
 import { shadowAtWidth, tackLayers } from "../src/config/scene-geometry";
+import { boardFrameModule, buildBoardArt } from "./lib/board-art";
 import { composeScene, renderLayers } from "./lib/render-layer";
 import {
 	readSceneSource,
@@ -58,8 +65,6 @@ import {
 	type TrimmedArt,
 } from "./lib/source-art";
 
-/** Matches the browser default; SCENE_MAX_WIDTH is authored in rem. */
-const ROOT_FONT_SIZE = 16;
 const DEVICE_PIXEL_RATIO = 2;
 
 /**
@@ -92,17 +97,6 @@ const ASPECT_TOLERANCE = 0.01;
 
 const outDir = fileURLToPath(new URL("../public/images/", import.meta.url));
 
-/** SCENE_MAX_WIDTH is a CSS length, not a number; resolve it to pixels. */
-function cssLengthToPixels(value: string): number {
-	const match = /^\s*([\d.]+)(rem|px)\s*$/.exec(value);
-	if (!match) {
-		throw new Error(
-			`SCENE_MAX_WIDTH is "${value}"; this script only resolves rem and px.`,
-		);
-	}
-	return match[2] === "rem" ? Number(match[1]) * ROOT_FONT_SIZE : Number(match[1]);
-}
-
 function formatKilobytes(bytes: number): string {
 	return `${(bytes / 1024).toFixed(1)} KB`;
 }
@@ -112,12 +106,6 @@ function round4(value: number): number {
 }
 
 const failures: string[] = [];
-const sceneMaxWidthPx = cssLengthToPixels(SCENE_MAX_WIDTH);
-if (sceneMaxWidthPx !== SCENE_REFERENCE_WIDTH) {
-	failures.push(
-		`SCENE_REFERENCE_WIDTH is ${SCENE_REFERENCE_WIDTH} but SCENE_MAX_WIDTH resolves to ${sceneMaxWidthPx}px`,
-	);
-}
 
 async function loadArt(image: string): Promise<TrimmedArt | null> {
 	const name = baseName(image);
@@ -236,7 +224,7 @@ for (const layer of renderLayers(layers)) {
 	}
 	const art = await loadTrimmed(name);
 	const targetWidth = Math.round(
-		layer.box.width * sceneMaxWidthPx * DEVICE_PIXEL_RATIO,
+		layer.box.width * SCENE_REFERENCE_WIDTH * DEVICE_PIXEL_RATIO,
 	);
 	const outputWidth = Math.min(targetWidth, art.width);
 	const outputPath = `${outDir}${fileName}`;
@@ -288,7 +276,46 @@ await composed
 written.add(mobileName);
 
 // ---------------------------------------------------------------------------
-// 4. Drop outputs nothing refers to any more (an old scene's art, a tack
+// 4. The desktop board. At md and up the board is not one image but a frame
+//    that fills the viewport: a 9-slice of the wood, cork tiled inside it,
+//    and the art's inner shadow laid over the cork. All three are cut from
+//    board.png here, and the measurements that place them — the slice
+//    offsets above all — are written to a generated config module rather
+//    than typed in.
+// ---------------------------------------------------------------------------
+
+const boardArt = await buildBoardArt(baseName(boardLayer.image), {
+	frame: WEBP_QUALITY,
+	cork: BOARD_WEBP_QUALITY,
+	alpha: WEBP_ALPHA_QUALITY,
+	effort: WEBP_EFFORT,
+});
+const boardFiles = [
+	{ image: SCENE_BOARD_ART.frame, bytes: boardArt.files.frame },
+	{ image: SCENE_BOARD_ART.cork, bytes: boardArt.files.cork },
+	{ image: SCENE_BOARD_ART.shadow, bytes: boardArt.files.shadow },
+];
+for (const file of boardFiles) {
+	const fileName = `${baseName(file.image)}.webp`;
+	writeFileSync(`${outDir}${fileName}`, file.bytes);
+	written.add(fileName);
+}
+const boardModulePath = fileURLToPath(
+	new URL("../src/config/board-frame.gen.ts", import.meta.url),
+);
+const boardModule = boardFrameModule(boardArt.measure);
+let boardModuleChanged = true;
+try {
+	boardModuleChanged = readFileSync(boardModulePath, "utf8") !== boardModule;
+} catch {
+	// First run: the module does not exist yet.
+}
+if (boardModuleChanged) {
+	writeFileSync(boardModulePath, boardModule);
+}
+
+// ---------------------------------------------------------------------------
+// 5. Drop outputs nothing refers to any more (an old scene's art, a tack
 //    whose colour was reassigned).
 // ---------------------------------------------------------------------------
 
@@ -346,6 +373,25 @@ console.log(rule);
 console.log(line(total));
 console.log(
 	`\nmobile composite: ${mobileName} ${mobileWidth}x${mobileHeight}, ${formatKilobytes(statSync(mobilePath).size)}`,
+);
+const { slice, tile, shadow } = boardArt.measure;
+console.log(
+	`\ndesktop board, measured from ${baseName(boardLayer.image)}.png (art px):`,
+);
+console.log(
+	`  frame slices   top ${slice.top}  right ${slice.right}  bottom ${slice.bottom}  left ${slice.left}`,
+);
+console.log(`  cork tile      ${tile.width}x${tile.height} (a ${tile.width / 2}px patch, mirrored 2x2)`);
+console.log(
+	`  inner shadow   ${shadow.width}x${shadow.height} overlay, slices top ${shadow.slice.top}  left ${shadow.slice.left}`,
+);
+for (const file of boardFiles) {
+	console.log(
+		`  ${`${baseName(file.image)}.webp`.padEnd(20)} ${formatKilobytes(file.bytes.length)}`,
+	);
+}
+console.log(
+	`  src/config/board-frame.gen.ts ${boardModuleChanged ? "rewritten" : "unchanged"}`,
 );
 for (const file of stale) {
 	console.log(`removed stale output: ${file}`);

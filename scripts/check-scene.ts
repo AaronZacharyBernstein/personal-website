@@ -4,26 +4,39 @@
  *
  *   npm run check-scene
  *
- * Every layer and tack is drawn into scene space exactly as the browser
- * places it (lib/render-layer: trimmed art, box, rotation about the pivot),
- * and the rules are then counted in pixels of real silhouette, not bounding
- * boxes:
+ * Every layer and tack is drawn into the composition's scene box exactly as
+ * the browser places it (lib/render-layer: trimmed art, box, rotation about
+ * the pivot), and the rules are counted in pixels of real silhouette, not
+ * bounding boxes.
  *
- *   - every item and tack sits inside the cork (SCENE_CORK), never on the frame
+ * The composition's own rules do not depend on the window:
+ *
  *   - nothing overlaps the name card
  *   - no hotspot is more than MAX_COVERED hidden under other items
  *   - no tack is covered by anything
  *   - no tack's nearest neighbour shares its colour; all three variants used
  *   - the hotspots' reading order on the board matches the nav order
  *
+ * The rest do, because on desktop the board is the viewport: the frame's
+ * thickness follows the window's height (or its width, on a window
+ * narrower than 16:10), the composition is fitted and
+ * centred on whatever cork that leaves, and the team pins are carried to
+ * the cork's corner. So for each viewport in VIEWPORTS (and, more coarsely,
+ * across a sweep of every plausible window size), using the same layout
+ * arithmetic as the stylesheet (src/config/board.ts):
+ *
+ *   - every item and tack sits on the cork, clear of the frame
+ *   - so does every team pin, where it has been carried to
+ *   - no team pin touches the composition
+ *
  * Exits non-zero if any rule fails.
  */
 
 import process from "node:process";
+import { BOARD_FRAME } from "../src/config/board-frame.gen";
+import { boardLayout, STAGE_CORK } from "../src/config/board";
 import {
-	SCENE_BOARD_ID,
 	SCENE_BOARD_PIXELS,
-	SCENE_CORK,
 	SCENE_HOTSPOTS,
 	SCENE_LAYERS,
 	SCENE_NAME_CARD_ID,
@@ -34,7 +47,6 @@ import {
 	renderLayer,
 	renderLayers,
 } from "./lib/render-layer";
-import { baseName, loadTrimmed } from "./lib/source-art";
 
 /** A hotspot may lose this much of its silhouette under other items. */
 const MAX_COVERED = 0.15;
@@ -42,7 +54,25 @@ const MAX_COVERED = 0.15;
 const SOLID_ALPHA = 32;
 /** Hotspots whose centres are within this much of the scene's height read as one row. */
 const ROW_BAND = 0.22;
+/** Everything keeps at least this far from the frame, in pixels of board art. */
+const FRAME_CLEARANCE = 3;
+/** Below md the board is one flat image; these rules are for md and up. */
+const MIN_WIDTH = 768;
 
+/** The windows the board is checked at by name. */
+const VIEWPORTS: ReadonlyArray<readonly [number, number, string]> = [
+	[1366, 768, "laptop"],
+	[1440, 900, "reference"],
+	[1920, 1080, "full HD"],
+	[2560, 1440, "QHD"],
+	[3440, 1440, "ultrawide"],
+	[820, 1180, "portrait tablet"],
+	[768, 1024, "narrowest desktop layout"],
+	[1024, 600, "short"],
+];
+
+// The composition is drawn at the art's own resolution: one grid pixel is
+// one pixel of board art.
 const WIDTH = SCENE_BOARD_PIXELS.width;
 const HEIGHT = SCENE_BOARD_PIXELS.height;
 
@@ -50,12 +80,25 @@ interface Drawn {
 	layer: RenderLayer;
 	mask: Uint8Array;
 	pixels: number;
+	/** Extent of the silhouette, in grid pixels (x1 and y1 inclusive). */
+	x0: number;
+	y0: number;
+	x1: number;
+	y1: number;
 }
 
 async function draw(layer: RenderLayer): Promise<Drawn> {
 	const raster = await renderLayer(layer, WIDTH, HEIGHT);
 	const mask = new Uint8Array(WIDTH * HEIGHT);
-	let pixels = 0;
+	const drawn: Drawn = {
+		layer,
+		mask,
+		pixels: 0,
+		x0: WIDTH,
+		y0: HEIGHT,
+		x1: -1,
+		y1: -1,
+	};
 	for (let y = 0; y < raster.height; y++) {
 		const sceneY = raster.top + y;
 		if (sceneY < 0 || sceneY >= HEIGHT) continue;
@@ -64,11 +107,15 @@ async function draw(layer: RenderLayer): Promise<Drawn> {
 			if (sceneX < 0 || sceneX >= WIDTH) continue;
 			if (raster.data[(y * raster.width + x) * 4 + 3] >= SOLID_ALPHA) {
 				mask[sceneY * WIDTH + sceneX] = 1;
-				pixels++;
+				drawn.pixels++;
+				if (sceneX < drawn.x0) drawn.x0 = sceneX;
+				if (sceneX > drawn.x1) drawn.x1 = sceneX;
+				if (sceneY < drawn.y0) drawn.y0 = sceneY;
+				if (sceneY > drawn.y1) drawn.y1 = sceneY;
 			}
 		}
 	}
-	return { layer, mask, pixels };
+	return drawn;
 }
 
 function overlap(a: Uint8Array, b: Uint8Array): number {
@@ -81,119 +128,54 @@ function overlap(a: Uint8Array, b: Uint8Array): number {
 
 const percent = (fraction: number) => `${(fraction * 100).toFixed(1)}%`;
 
+if (
+	BOARD_FRAME.width !== WIDTH ||
+	BOARD_FRAME.height !== HEIGHT
+) {
+	console.log(
+		`FAIL board-frame.gen.ts is for a ${BOARD_FRAME.width}x${BOARD_FRAME.height} board but SCENE_BOARD_PIXELS is ${WIDTH}x${HEIGHT}; run npm run optimize-images`,
+	);
+	process.exit(1);
+}
+
 const all = await Promise.all(renderLayers(SCENE_LAYERS).map(draw));
 const drawn = all.filter((entry) => entry.layer.role !== "board");
-const items = drawn.filter((entry) => entry.layer.role === "item");
-const tacks = drawn.filter((entry) => entry.layer.role === "tack");
+/** Layers the desktop board carries to a corner of the cork: the team pins. */
+const pins = drawn.filter((entry) => entry.layer.anchor !== undefined);
+/** Everything else: the composition, tacks included. */
+const composition = drawn.filter((entry) => entry.layer.anchor === undefined);
+const items = composition.filter((entry) => entry.layer.role === "item");
+const tacks = composition.filter((entry) => entry.layer.role === "tack");
+
+const compositionMask = new Uint8Array(WIDTH * HEIGHT);
+for (const { mask } of composition) {
+	for (let i = 0; i < mask.length; i++) {
+		if (mask[i] === 1) compositionMask[i] = 1;
+	}
+}
+const extent = (entries: Drawn[]) => ({
+	x0: Math.min(...entries.map((entry) => entry.x0)),
+	y0: Math.min(...entries.map((entry) => entry.y0)),
+	x1: Math.max(...entries.map((entry) => entry.x1)),
+	y1: Math.max(...entries.map((entry) => entry.y1)),
+});
+const compositionExtent = extent(composition);
+const pinExtent = extent(pins);
 
 const failures: string[] = [];
 const report: string[] = [];
 
-// --- The cork itself: where does the frame's inner outline actually end? ---
-{
-	const board = await loadTrimmed(baseName(`${SCENE_BOARD_ID}.webp`));
-	const dark = (x: number, y: number) => {
-		const i = (y * board.width + x) * 4;
-		const luminance =
-			0.299 * board.data[i] +
-			0.587 * board.data[i + 1] +
-			0.114 * board.data[i + 2];
-		return board.data[i + 3] > 128 && luminance < 70;
-	};
-	/**
-	 * Walk inward from one edge along one line and return how far the inner
-	 * outline reaches: the end of the first dark run that starts between 3%
-	 * and 8% of the way in (the outer outline is nearer the edge than that,
-	 * and the cork's speckle is further in).
-	 */
-	const innerEdge = (length: number, isDark: (step: number) => boolean) => {
-		let step = Math.round(length * 0.03);
-		const limit = Math.round(length * 0.08);
-		while (step < limit && !isDark(step)) step++;
-		if (step >= limit) return null;
-		while (step < length * 0.15 && isDark(step)) step++;
-		return step;
-	};
-	let left = 0;
-	let right = 0;
-	let top = 0;
-	let bottom = 0;
-	for (let y = Math.round(board.height * 0.2); y < board.height * 0.8; y++) {
-		left = Math.max(left, innerEdge(board.width, (s) => dark(s, y)) ?? 0);
-		right = Math.max(
-			right,
-			innerEdge(board.width, (s) => dark(board.width - 1 - s, y)) ?? 0,
-		);
-	}
-	for (let x = Math.round(board.width * 0.2); x < board.width * 0.8; x++) {
-		// The frame is thicker relative to the height, so scale the window.
-		const scale = board.width / board.height;
-		const edge = (isDark: (step: number) => boolean) => {
-			let step = Math.round(board.height * 0.03 * scale);
-			const limit = Math.round(board.height * 0.08 * scale);
-			while (step < limit && !isDark(step)) step++;
-			if (step >= limit) return 0;
-			while (step < board.height * 0.15 * scale && isDark(step)) step++;
-			return step;
-		};
-		top = Math.max(top, edge((s) => dark(x, s)));
-		bottom = Math.max(bottom, edge((s) => dark(x, board.height - 1 - s)));
-	}
-	const measured = {
-		x0: left / board.width,
-		y0: top / board.height,
-		x1: 1 - right / board.width,
-		y1: 1 - bottom / board.height,
-	};
-	report.push(
-		`cork measured from board art: x ${measured.x0.toFixed(4)}..${measured.x1.toFixed(4)}, y ${measured.y0.toFixed(4)}..${measured.y1.toFixed(4)}`,
-		`cork configured (SCENE_CORK): x ${SCENE_CORK.x0}..${SCENE_CORK.x1}, y ${SCENE_CORK.y0}..${SCENE_CORK.y1}`,
-	);
-	if (
-		SCENE_CORK.x0 < measured.x0 ||
-		SCENE_CORK.y0 < measured.y0 ||
-		SCENE_CORK.x1 > measured.x1 ||
-		SCENE_CORK.y1 > measured.y1
-	) {
-		failures.push("SCENE_CORK reaches onto the frame's outline");
-	}
-}
+// ---------------------------------------------------------------------------
+// The composition's own rules.
+// ---------------------------------------------------------------------------
 
-// --- Inside the cork ---
-{
-	const x0 = Math.ceil(SCENE_CORK.x0 * WIDTH);
-	const x1 = Math.floor(SCENE_CORK.x1 * WIDTH);
-	const y0 = Math.ceil(SCENE_CORK.y0 * HEIGHT);
-	const y1 = Math.floor(SCENE_CORK.y1 * HEIGHT);
-	for (const { layer, mask } of drawn) {
-		let outside = 0;
-		let reach = 0;
-		for (let y = 0; y < HEIGHT; y++) {
-			for (let x = 0; x < WIDTH; x++) {
-				if (mask[y * WIDTH + x] !== 1) continue;
-				const over = Math.max(x0 - x, x - x1, y0 - y, y - y1, 0);
-				if (over > 0) {
-					outside++;
-					reach = Math.max(reach, over);
-				}
-			}
-		}
-		if (outside > 0) {
-			failures.push(
-				`${layer.id} leaves the cork: ${outside}px outside, up to ${reach}px past the edge`,
-			);
-		}
-	}
-	report.push("inside cork: checked every item and tack");
-}
-
-// --- Nothing overlaps the name card ---
+// --- Nothing in the composition overlaps the name card ---
 {
 	const card = items.find((entry) => entry.layer.id === SCENE_NAME_CARD_ID);
 	if (!card) {
 		failures.push(`no "${SCENE_NAME_CARD_ID}" layer`);
 	} else {
-		for (const other of drawn) {
+		for (const other of composition) {
 			if (
 				other === card ||
 				(other.layer.role === "tack" && other.layer.ownerId === card.layer.id)
@@ -205,7 +187,6 @@ const report: string[] = [];
 				failures.push(`${other.layer.id} overlaps the name card by ${shared}px`);
 			}
 		}
-		report.push("name card: checked against every other layer");
 	}
 }
 
@@ -237,7 +218,7 @@ for (const hotspot of SCENE_HOTSPOTS) {
 
 // --- Tacks: uncovered, colours apart, variants spread ---
 for (const tack of tacks) {
-	for (const other of drawn) {
+	for (const other of composition) {
 		if (other === tack || other.layer.zIndex <= tack.layer.zIndex) continue;
 		const shared = overlap(tack.mask, other.mask);
 		if (shared > 0) {
@@ -332,6 +313,131 @@ for (const tack of tacks) {
 	if (reading.join() !== nav.join()) {
 		failures.push("the board's reading order does not match the nav order");
 	}
+}
+
+// ---------------------------------------------------------------------------
+// The board at a given window.
+// ---------------------------------------------------------------------------
+
+interface ViewportResult {
+	problems: string[];
+	line: string;
+}
+
+/**
+ * Everything is measured in the composition's grid: the real cork and the
+ * pins' journey are converted into grid pixels, so the silhouettes drawn
+ * once above serve every viewport.
+ */
+function checkViewport(width: number, height: number): ViewportResult {
+	const layout = boardLayout(width, height);
+	const problems: string[] = [];
+	/** CSS pixels per grid pixel. */
+	const scale = layout.stage.width / WIDTH;
+	// The real cork, in grid pixels, pulled in by the clearance.
+	const cork = {
+		x0: (layout.cork.x - layout.stage.x) / scale + FRAME_CLEARANCE,
+		y0: (layout.cork.y - layout.stage.y) / scale + FRAME_CLEARANCE,
+		x1:
+			(layout.cork.x + layout.cork.width - layout.stage.x) / scale -
+			FRAME_CLEARANCE,
+		y1:
+			(layout.cork.y + layout.cork.height - layout.stage.y) / scale -
+			FRAME_CLEARANCE,
+	};
+	// Whole grid pixels, as the stylesheet's transform is not rounded but
+	// a silhouette test has to be: round toward the composition, the
+	// conservative direction for the collision check.
+	const shiftX = Math.floor(layout.anchorShift.x / scale);
+	const shiftY = -Math.floor(-layout.anchorShift.y / scale);
+
+	if (layout.cork.width <= 0 || layout.cork.height <= 0) {
+		problems.push("the frame leaves no cork");
+	}
+	if (
+		compositionExtent.x0 < cork.x0 ||
+		compositionExtent.y0 < cork.y0 ||
+		compositionExtent.x1 + 1 > cork.x1 ||
+		compositionExtent.y1 + 1 > cork.y1
+	) {
+		const culprit = composition.find(
+			(entry) =>
+				entry.x0 < cork.x0 ||
+				entry.y0 < cork.y0 ||
+				entry.x1 + 1 > cork.x1 ||
+				entry.y1 + 1 > cork.y1,
+		);
+		problems.push(`${culprit?.layer.id ?? "the composition"} overlaps the frame`);
+	}
+	if (
+		pinExtent.x0 + shiftX < cork.x0 ||
+		pinExtent.y0 + shiftY < cork.y0 ||
+		pinExtent.x1 + 1 + shiftX > cork.x1 ||
+		pinExtent.y1 + 1 + shiftY > cork.y1
+	) {
+		problems.push("a team pin overlaps the frame");
+	}
+	let touching = 0;
+	for (const pin of pins) {
+		for (let y = pin.y0; y <= pin.y1; y++) {
+			const targetY = y + shiftY;
+			if (targetY < 0 || targetY >= HEIGHT) continue;
+			for (let x = pin.x0; x <= pin.x1; x++) {
+				if (pin.mask[y * WIDTH + x] !== 1) continue;
+				const targetX = x + shiftX;
+				if (targetX < 0 || targetX >= WIDTH) continue;
+				if (compositionMask[targetY * WIDTH + targetX] === 1) touching++;
+			}
+		}
+	}
+	if (touching > 0) {
+		problems.push(`the team pins overlap the composition by ${touching}px`);
+	}
+
+	// How far the pins end up from the composition, in CSS pixels: the gap
+	// between the clump's left edge and the composition's right edge.
+	const gap = Math.round(
+		(pinExtent.x0 + shiftX - compositionExtent.x1) * scale,
+	);
+	const line =
+		`${`${width}x${height}`.padEnd(10)} frame ${layout.frame.top.toFixed(0)}/${layout.frame.right.toFixed(0)}/${layout.frame.bottom.toFixed(0)}/${layout.frame.left.toFixed(0)}px` +
+		`  cork ${layout.cork.width.toFixed(0)}x${layout.cork.height.toFixed(0)}` +
+		`  composition ${layout.stage.width.toFixed(0)}px wide (${layout.bound})` +
+		`  pins moved ${layout.anchorShift.x.toFixed(0)}px right, ${(-layout.anchorShift.y).toFixed(0)}px up` +
+		`${gap > 0 ? `, ${gap}px clear of the composition` : ", beside the composition as drawn"}`;
+	return { problems, line };
+}
+
+report.push("");
+report.push(
+	`frame slices (art px): top ${BOARD_FRAME.slice.top}, right ${BOARD_FRAME.slice.right}, bottom ${BOARD_FRAME.slice.bottom}, left ${BOARD_FRAME.slice.left}` +
+		`; the composition's cork is ${percent(STAGE_CORK.width)} x ${percent(STAGE_CORK.height)} of its scene box`,
+);
+for (const [width, height, name] of VIEWPORTS) {
+	const result = checkViewport(width, height);
+	report.push(`${result.line}  [${name}]`);
+	for (const problem of result.problems) {
+		failures.push(`at ${width}x${height} (${name}): ${problem}`);
+	}
+}
+
+// --- Every plausible window, coarsely ---
+{
+	let checked = 0;
+	const bad: string[] = [];
+	for (let width = MIN_WIDTH; width <= 5120; width += 32) {
+		for (let height = 480; height <= 2160; height += 24) {
+			checked++;
+			const result = checkViewport(width, height);
+			if (result.problems.length > 0 && bad.length < 5) {
+				bad.push(`at ${width}x${height}: ${result.problems.join("; ")}`);
+			}
+		}
+	}
+	report.push(
+		`sweep: ${checked} window sizes from ${MIN_WIDTH}x480 to 5120x2160, ${bad.length === 0 ? "none with a problem" : "problems found"}`,
+	);
+	failures.push(...bad);
 }
 
 for (const line of report) {

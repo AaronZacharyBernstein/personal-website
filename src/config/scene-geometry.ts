@@ -166,14 +166,15 @@ export function referencePixels(pixels: number): number {
 }
 
 /**
- * A shadow preset as a CSS filter. Lengths are container-query units of the
- * scene box, so the shadow scales with the board instead of staying a fixed
- * pixel size on a shrunken one.
+ * A shadow preset as a CSS filter. Lengths are fractions of --stage-w, the
+ * composition's rendered width (declared on the stage in styles.css), so a
+ * shadow scales with the items instead of staying a fixed pixel size on a
+ * shrunken board.
  */
 export function shadowFilter(shadow: SceneShadow): string {
-	const cqw = (pixels: number) =>
-		`${Number((referencePixels(pixels) * 100).toFixed(4))}cqw`;
-	return `drop-shadow(${cqw(shadow.x)} ${cqw(shadow.y)} ${cqw(shadow.blur)} rgba(0,0,0,${shadow.opacity}))`;
+	const length = (pixels: number) =>
+		`calc(var(--stage-w) * ${Number(referencePixels(pixels).toFixed(6))})`;
+	return `drop-shadow(${length(shadow.x)} ${length(shadow.y)} ${length(shadow.blur)} rgba(0,0,0,${shadow.opacity}))`;
 }
 
 /**

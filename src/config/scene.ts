@@ -20,34 +20,51 @@ export const SCENE_ASPECT_RATIO =
  */
 export const DESKTOP_MEDIA_QUERY = "(min-width: 768px)";
 
-/** Max rendered width of the scene box. Tune here, nowhere else. */
-export const SCENE_MAX_WIDTH = "72rem";
-
 /**
- * SCENE_MAX_WIDTH in pixels at the default root font size. Lengths that
- * must scale with the board (shadows) are authored in pixels at this width
- * and converted to container units, so they read as "what it looks like at
- * full size".
+ * The composition at its reference size: 1152px wide in a 900px-tall window,
+ * which is where the layout, the shadows and the frame's thickness were
+ * all judged. Lengths that must scale with the composition (shadows) are
+ * authored in pixels at this width, so they read as "what it looks like at
+ * the reference size". The image pipeline sizes art for twice this.
  */
 export const SCENE_REFERENCE_WIDTH = 1152;
 
 /**
- * Vertical room the desktop board leaves free when it shrinks to fit the
- * viewport height: the page's py-6 gutters plus a little air, so the whole
- * board is visible without scrolling.
+ * Max rendered width of the composition's scene box. Tune here, nowhere
+ * else.
+ *
+ * In viewport-height units on purpose: 128dvh is SCENE_REFERENCE_WIDTH at
+ * the 900px reference height, so the composition grows and shrinks with
+ * the window's height exactly as the frame around it does, and the board
+ * keeps the proportions it has at 1440x900 on every screen. Extra width
+ * becomes empty cork. (On a window narrower than 16:10 both follow the
+ * width instead: the frame by its own rule in board.ts, the composition
+ * because the cork is then the tighter limit.)
+ *
+ * The alternative is a fixed cap — "72rem" is the same 1152px — which holds
+ * the composition at that size on taller screens while the frame keeps
+ * growing: on a 1440px-tall monitor it becomes a small island of items in a
+ * thick frame. Both are supported; `npm run check-scene` passes with
+ * either.
+ */
+export const SCENE_MAX_WIDTH = "128dvh";
+
+/**
+ * How much shorter than the viewport the composition's own scene box stays
+ * when it is height-bound (see board.ts): room for the frame, with some air.
  */
 export const SCENE_FIT_MARGIN = "4rem";
 
 /**
- * The usable cork: the area inside the frame's inner outline, normalized,
- * with a small inset for the outline's hand-drawn wobble. Every item must
- * sit inside it; `npm run check-scene` enforces that and `?debug=1` draws it.
+ * The desktop board's three images, all cut from board.png by
+ * `npm run optimize-images`: the wood frame for the 9-slice border, the
+ * mirrored cork tile, and the inner-shadow overlay. Their measurements live
+ * in board-frame.gen.ts; board.ts turns both into layout.
  */
-export const SCENE_CORK = {
-	x0: 0.066,
-	y0: 0.106,
-	x1: 0.926,
-	y1: 0.898,
+export const SCENE_BOARD_ART = {
+	frame: "/images/board-frame.webp",
+	cork: "/images/board-cork.webp",
+	shadow: "/images/board-shadow.webp",
 } as const;
 
 export type HotspotId =
@@ -111,6 +128,14 @@ interface SceneLayerBase {
 	 */
 	rotation?: number;
 	tack?: TackSpec;
+	/**
+	 * On the full-width desktop board, pin this layer to a corner of the
+	 * cork instead of leaving it where the composition puts it. Its box is
+	 * still authored in the composition; the layer is carried from there to
+	 * the corner, keeping its distance from the frame. Below md, and in the
+	 * flat mobile image, it stays where its box says.
+	 */
+	anchor?: "cork-top-right";
 }
 
 export interface DecorativeLayer extends SceneLayerBase {
@@ -488,6 +513,7 @@ export const SCENE_LAYERS: ReadonlyArray<SceneLayer> = [
 		zIndex: 80,
 		placeholderColor: "#b91c1c",
 		rotation: -8,
+		anchor: "cork-top-right",
 	},
 	{
 		kind: "decorative",
@@ -497,6 +523,7 @@ export const SCENE_LAYERS: ReadonlyArray<SceneLayer> = [
 		zIndex: 81,
 		placeholderColor: "#ea580c",
 		rotation: 6,
+		anchor: "cork-top-right",
 	},
 	{
 		kind: "decorative",
@@ -506,6 +533,7 @@ export const SCENE_LAYERS: ReadonlyArray<SceneLayer> = [
 		zIndex: 83,
 		placeholderColor: "#7c3aed",
 		rotation: 10,
+		anchor: "cork-top-right",
 	},
 	{
 		kind: "decorative",
@@ -515,6 +543,7 @@ export const SCENE_LAYERS: ReadonlyArray<SceneLayer> = [
 		zIndex: 82,
 		placeholderColor: "#0d9488",
 		rotation: -12,
+		anchor: "cork-top-right",
 	},
 	{
 		kind: "decorative",
@@ -524,6 +553,7 @@ export const SCENE_LAYERS: ReadonlyArray<SceneLayer> = [
 		zIndex: 84,
 		placeholderColor: "#dc2626",
 		rotation: -5,
+		anchor: "cork-top-right",
 	},
 	{
 		kind: "decorative",
@@ -533,6 +563,7 @@ export const SCENE_LAYERS: ReadonlyArray<SceneLayer> = [
 		zIndex: 85,
 		placeholderColor: "#1e3a8a",
 		rotation: 14,
+		anchor: "cork-top-right",
 	},
 ];
 

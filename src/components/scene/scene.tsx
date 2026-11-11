@@ -1,6 +1,5 @@
 import { useNavigate, useRouter } from "@tanstack/react-router";
 import { type CSSProperties, useRef } from "react";
-import { INTRO } from "#/config/intro";
 import type { HotspotId, HotspotLayer, SceneLayer } from "#/config/scene";
 import {
 	SCENE_BOARD_ID,
@@ -36,14 +35,15 @@ export interface SceneProps {
 /**
  * Config-derived values the stylesheet reads. Custom properties rather than
  * classes because they come from tunables in src/config; inherited, so one
- * declaration on the scene root reaches every layer.
+ * declaration on the stage reaches every layer. On the stage and no higher:
+ * the shadows are written in terms of --stage-w, which the stylesheet
+ * declares on this same element, and a custom property is resolved where it
+ * is declared.
  */
 const SCENE_VARIABLES = {
 	"--scene-shadow": shadowFilter(SCENE_SHADOWS.rest),
 	"--scene-shadow-hover": shadowFilter(SCENE_SHADOWS.hover),
 	"--scene-swing": `${SCENE_HOVER_SWING}deg`,
-	"--intro-board-fade": `${INTRO.boardFade * 1000}ms`,
-	"--intro-failsafe": `${INTRO.failsafeMs}ms`,
 } as CSSProperties;
 
 /** Where each hotspot's hover label hangs: centred, just above item and tack. */
@@ -95,8 +95,12 @@ function layerImage(image: string): CSSProperties {
  * <html> and driven by CSS and a post-hydration effect, never by what this
  * component renders.
  *
- * `@container` makes the scene box the reference for the cqw lengths the
- * shadows are written in, so they scale with the board.
+ * At md and up this element is the STAGE: the composition's own scene box,
+ * with the aspect ratio the layout was drawn in, sized and centred on the
+ * cork by the `[data-scene-stage]` rules in styles.css. The board itself —
+ * frame, cork, inner shadow — is drawn behind it by the layout. Every layer
+ * is placed in the stage by percentages, exactly as when the stage was the
+ * whole board; only the team pins are then carried to the cork's corner.
  */
 export function Scene({ hoveredId, onHoverChange, debug }: SceneProps) {
 	const navigate = useNavigate();
@@ -119,14 +123,16 @@ export function Scene({ hoveredId, onHoverChange, debug }: SceneProps) {
 		<div
 			ref={rootRef}
 			aria-hidden="true"
-			className="@container relative hidden h-full w-full md:block"
+			data-scene-stage=""
+			className="hidden md:block"
 			style={SCENE_VARIABLES}
 		>
 			{/* Paint order comes from each layer's zIndex, not array order. */}
-			{SCENE_LAYERS.map((layer) =>
-				layer.id === SCENE_BOARD_ID ? (
-					<BoardLayer key={layer.id} layer={layer} />
-				) : (
+			{/* The board layer is not drawn here: on desktop the board is the
+			    frame and cork behind the stage. It stays in SCENE_LAYERS for
+			    the flat mobile image and the calibration tool. */}
+			{SCENE_LAYERS.filter((layer) => layer.id !== SCENE_BOARD_ID).map(
+				(layer) => (
 					<ItemLayer
 						key={layer.id}
 						layer={layer}
@@ -210,23 +216,8 @@ export function Scene({ hoveredId, onHoverChange, debug }: SceneProps) {
  * unresolved token until something substitutes it, so below md — where the
  * rule does not apply — the URL is never resolved and the art is never
  * requested, however the element is laid out.
- */
-function BoardLayer({ layer }: { layer: SceneLayer }) {
-	return (
-		<div
-			data-scene-layer=""
-			data-intro="board"
-			className="pointer-events-none absolute"
-			style={{
-				...boxStyle(layer.box, layer.zIndex),
-				...layerImage(layer.image),
-			}}
-		/>
-	);
-}
-
-/**
- * An item is three boxes, each with one job, so that its shadow, its
+ *
+ * An item is three such boxes, each with one job, so that its shadow, its
  * rotation and the intro never write to the same property:
  *
  *   the outer box places it (left/top/width/height from config);
@@ -246,6 +237,11 @@ function ItemLayer({ layer, lifted }: { layer: SceneLayer; lifted: boolean }) {
 	const [pivotX, pivotY] = layerPivot(layer);
 	return (
 		<div
+			// Anchored layers (the team pins) are carried from here to a corner
+			// of the cork by a transform on this outer box — see styles.css.
+			// The shadow, the rotation and the intro all live on the boxes
+			// inside it, so none of them has to know.
+			data-scene-anchor={layer.anchor}
 			className="pointer-events-none absolute"
 			style={boxStyle(layer.box, layer.zIndex)}
 		>

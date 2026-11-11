@@ -123,9 +123,11 @@ export function SectionNav({
 			className={cn(
 				"w-full",
 				hideBelowMd && "max-md:hidden",
-				// right offset includes --scroll-lock-gap so the popover doesn't
-				// jump when an open panel removes the page scrollbar.
-				"md:fixed md:top-16 md:right-[calc(1rem+var(--scroll-lock-gap,0px))] md:z-50 md:w-44 md:rounded-lg md:border md:bg-popover md:p-2 md:shadow-lg",
+				// Opens just inside the frame's top-right corner, below the toggle
+				// that sits on the wood there. The right offset includes
+				// --scroll-lock-gap so the popover doesn't jump when an open panel
+				// removes a page scrollbar.
+				"md:fixed md:top-[calc(var(--frame-top)+0.5rem)] md:right-[calc(var(--frame-right)+0.5rem+var(--scroll-lock-gap,0px))] md:z-50 md:w-44 md:rounded-lg md:border md:bg-popover md:p-2 md:shadow-lg",
 				"motion-safe:duration-200",
 				// visibility (not just opacity) so closed links are out of the
 				// tab order — and already are in the pre-hydration HTML.

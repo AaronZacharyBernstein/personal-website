@@ -51,6 +51,9 @@ export function serializeSceneLayers(
 			if (layer.rotation) {
 				lines.push(`\t\trotation: ${round4(layer.rotation)},`);
 			}
+			if (layer.anchor) {
+				lines.push(`\t\tanchor: ${s(layer.anchor)},`);
+			}
 			if (layer.tack) {
 				lines.push(
 					`\t\ttack: { color: ${s(layer.tack.color)}, variant: ${layer.tack.variant}, at: [${round4(layer.tack.at[0])}, ${round4(layer.tack.at[1])}] },`,

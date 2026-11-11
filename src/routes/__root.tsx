@@ -7,17 +7,9 @@ import {
 } from "@tanstack/react-router";
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
 import { INTRO_BOOT } from "#/components/scene/intro-boot";
-import {
-	DESKTOP_MEDIA_QUERY,
-	SCENE_BOARD_ID,
-	SCENE_LAYERS,
-} from "#/config/scene";
+import { DESKTOP_MEDIA_QUERY, SCENE_BOARD_ART } from "#/config/scene";
 import { SITE_TITLE } from "#/content/site";
 import appCss from "../styles.css?url";
-
-const boardImage = SCENE_LAYERS.find(
-	(layer) => layer.id === SCENE_BOARD_ID,
-)?.image;
 
 export const Route = createRootRoute({
 	head: () => ({
@@ -38,21 +30,17 @@ export const Route = createRootRoute({
 				rel: "stylesheet",
 				href: appCss,
 			},
-			// The board is a CSS background, so the browser only learns of it
-			// once the stylesheet is parsed. Preloading it starts the fetch
-			// straight off the HTML — the board is the first thing the intro
-			// shows. Media-scoped like the rule that paints it, so a phone
-			// never downloads it.
-			...(boardImage
-				? [
-						{
-							rel: "preload",
-							as: "image",
-							href: boardImage,
-							media: DESKTOP_MEDIA_QUERY,
-						},
-					]
-				: []),
+			// The board's frame and cork are CSS images, so the browser only
+			// learns of them once the stylesheet is parsed. Preloading starts
+			// both fetches straight off the HTML — the board is the first thing
+			// the intro shows, and the two should arrive together. Media-scoped
+			// like the rules that paint them, so a phone never downloads them.
+			...[SCENE_BOARD_ART.frame, SCENE_BOARD_ART.cork].map((href) => ({
+				rel: "preload",
+				as: "image",
+				href,
+				media: DESKTOP_MEDIA_QUERY,
+			})),
 		],
 	}),
 	shellComponent: RootDocument,

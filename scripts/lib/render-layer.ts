@@ -22,6 +22,8 @@ export interface RenderLayer extends Placed {
 	role: "board" | "item" | "tack";
 	/** For a tack, the item it holds. */
 	ownerId?: string;
+	/** Set on a layer the desktop board carries to a corner of the cork. */
+	anchor?: SceneLayer["anchor"];
 }
 
 /** Items and their derived tacks, in paint order. */
@@ -33,6 +35,7 @@ export function renderLayers(layers: ReadonlyArray<SceneLayer>): RenderLayer[] {
 		box: layer.box,
 		rotation: layer.rotation,
 		tack: layer.tack,
+		anchor: layer.anchor,
 		role: layer.id === SCENE_BOARD_ID ? "board" : "item",
 	}));
 	const tacks: RenderLayer[] = tackLayers(layers).map((tack) => ({

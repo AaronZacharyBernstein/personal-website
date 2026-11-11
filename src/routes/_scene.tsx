@@ -12,7 +12,7 @@ import {
 	useRef,
 	useState,
 } from "react";
-import { SCENE_FRAME_STYLE } from "#/components/scene/frame";
+import { BOARD_STYLE } from "#/components/scene/frame";
 import { Scene } from "#/components/scene/scene";
 import { SceneMobile } from "#/components/scene/scene-mobile";
 import {
@@ -133,8 +133,18 @@ function SceneLayout() {
 		return () => document.removeEventListener("keydown", handleKeyDown);
 	}, [navOpen, closeNav]);
 
+	// The calibration tool is a desktop editor laid out like an ordinary
+	// page; everything else at md and up is the full-viewport board.
+	const calibrating = isDesktop === true && calibrate === true;
+
 	return (
-		<div className="mx-auto w-full px-4 py-6">
+		<div
+			// Below md: a padded column, flat board image then the nav list. At
+			// md and up the board is the viewport, edge to edge, so the gutters
+			// go — and with them any reason for the page to scroll.
+			className={cn("mx-auto w-full px-4 py-6", !calibrating && "md:p-0")}
+			style={BOARD_STYLE}
+		>
 			{/* The name on the board is lettering in an image, so the page's
 			    real heading is this one: in the server-rendered HTML for
 			    search engines and screen readers, visually hidden. Only on
@@ -161,11 +171,14 @@ function SceneLayout() {
 						setNavOpen(true);
 					}
 				}}
-				// right offset includes --scroll-lock-gap: an open panel removes
-				// the page scrollbar, which widens the viewport that fixed
-				// elements position against; the panel publishes the vanished
-				// width so this chrome doesn't jump right by a scrollbar.
-				className="fixed top-4 right-[calc(1rem+var(--scroll-lock-gap,0px))] z-50 hidden size-10 items-center justify-center rounded-md border bg-background shadow-sm hover:bg-accent focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none md:inline-flex"
+				// Sits on the wood, centred on the frame's top-right corner block
+				// (the offsets are computed in frame.ts from the frame's
+				// thickness), so it never covers the cork or the pins in that
+				// corner. The right offset also includes --scroll-lock-gap: an
+				// open panel removes any page scrollbar, which widens the viewport
+				// that fixed elements position against; the panel publishes the
+				// vanished width so this chrome doesn't jump right by it.
+				className="fixed top-(--nav-toggle-top) right-[calc(var(--nav-toggle-right)+var(--scroll-lock-gap,0px))] z-50 hidden size-10 items-center justify-center rounded-md border bg-background shadow-sm hover:bg-accent focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:outline-none md:inline-flex"
 			>
 				<svg
 					viewBox="0 0 24 24"
@@ -180,20 +193,22 @@ function SceneLayout() {
 				</svg>
 			</button>
 			<div className="flex flex-col items-center gap-6 md:flex-row md:items-start md:justify-center">
-				{isDesktop === true && calibrate === true ? (
+				{calibrating ? (
 					<Suspense
 						fallback={
 							// Same-size box so the layout never collapses while the
 							// lazy calibration chunk loads.
-							<div data-scene-frame="" style={SCENE_FRAME_STYLE} />
+							<div data-scene-canvas="" />
 						}
 					>
 						<CalibrationTool debug={debug === true} />
 					</Suspense>
 				) : (
+					// The board. Below md, a box with the board's aspect ratio
+					// holding the flat image; at md and up, the whole viewport. All
+					// of that is the [data-scene-*] rules in styles.css.
 					// isolate: the scene's internal z-indexes must never paint
-					// above the fixed z-50 nav chrome. Sized by the
-					// [data-scene-frame] rules in styles.css.
+					// above the fixed z-50 nav chrome.
 					<div
 						data-scene-frame=""
 						className={cn(
@@ -209,9 +224,33 @@ function SceneLayout() {
 						// keyboard/AT; unlike the nav's, this one can be
 						// server-rendered because sectionOpen is route state.
 						inert={sectionOpen}
-						style={SCENE_FRAME_STYLE}
 					>
-						{/* Both variants render on the server and stay mounted at
+						{/* Desktop only: the wood frame (a 9-slice of the board art)
+						    and the cork tiled inside it, on one element behind
+						    everything. It is what the intro fades in first. */}
+						<div
+							data-scene-board=""
+							data-intro="board"
+							aria-hidden="true"
+							className="hidden md:block"
+						/>
+						{/* The visible cork. At md and up everything on the board is
+						    placed against this box; below md it is just the frame's
+						    content box. */}
+						<div
+							data-scene-cork=""
+							data-debug={debug === true ? "" : undefined}
+							className="h-full w-full"
+						>
+							{/* Desktop only: the art's shadow along the top and left
+							    of the cork, over the tile and under the items. */}
+							<div
+								data-scene-board-shadow=""
+								data-intro="board"
+								aria-hidden="true"
+								className="hidden md:block"
+							/>
+							{/* Both variants render on the server and stay mounted at
 						    every width; each hides itself with a CSS breakpoint,
 						    and the media-query-scoped background rules mean the
 						    hidden one never fetches its art. Nothing on this path
@@ -219,12 +258,13 @@ function SceneLayout() {
 						    identical and the art starts downloading straight off
 						    the SSR'd HTML instead of waiting for hydration to
 						    decide who mounts. */}
-						<Scene
-							hoveredId={hoveredId}
-							onHoverChange={setHoveredId}
-							debug={debug === true}
-						/>
-						<SceneMobile />
+							<Scene
+								hoveredId={hoveredId}
+								onHoverChange={setHoveredId}
+								debug={debug === true}
+							/>
+							<SceneMobile />
+						</div>
 					</div>
 				)}
 				<SectionNav

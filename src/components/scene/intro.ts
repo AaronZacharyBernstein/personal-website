@@ -1,6 +1,6 @@
 import { type RefObject, useEffect } from "react";
 import { INTRO_PENDING_CLASS } from "#/config/intro";
-import { SCENE_LAYERS } from "#/config/scene";
+import { SCENE_BOARD_ART, SCENE_BOARD_ID, SCENE_LAYERS } from "#/config/scene";
 import { SCENE_TACKS } from "#/config/scene-geometry";
 
 /**
@@ -28,10 +28,20 @@ const introModule =
  * are ready to paint. A failed image must not hold the intro hostage.
  */
 function artReady(): Promise<unknown> {
+	// What the desktop board paints: the frame, cork and shadow it is built
+	// from, then every item and tack. Not the board layer itself — that
+	// image is only for the flat mobile scene.
+	const urls = [
+		...Object.values(SCENE_BOARD_ART),
+		...SCENE_LAYERS.filter((layer) => layer.id !== SCENE_BOARD_ID).map(
+			(layer) => layer.image,
+		),
+		...SCENE_TACKS.map((tack) => tack.image),
+	];
 	return Promise.all(
-		[...SCENE_LAYERS, ...SCENE_TACKS].map((layer) => {
+		urls.map((url) => {
 			const image = new Image();
-			image.src = layer.image;
+			image.src = url;
 			return image.decode().catch(() => undefined);
 		}),
 	);
