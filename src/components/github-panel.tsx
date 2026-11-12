@@ -100,13 +100,16 @@ function RepoCard({ repo }: { repo: GithubPinnedRepo }) {
 				<span className="font-medium [overflow-wrap:anywhere]">
 					{repo.name}
 				</span>
-				<span className="flex shrink-0 items-center gap-1 text-sm text-muted-foreground tabular-nums">
-					<Star aria-hidden="true" className="size-3.5" />
-					{repo.stars}
-					<span className="sr-only">
-						{repo.stars === 1 ? " star" : " stars"}
+				{/* An unstarred repo says nothing rather than "0". */}
+				{repo.stars > 0 ? (
+					<span className="flex shrink-0 items-center gap-1 text-sm text-muted-foreground tabular-nums">
+						<Star aria-hidden="true" className="size-3.5" />
+						{repo.stars}
+						<span className="sr-only">
+							{repo.stars === 1 ? " star" : " stars"}
+						</span>
 					</span>
-				</span>
+				) : null}
 			</span>
 			{repo.description ? (
 				<span className="text-sm text-muted-foreground">
